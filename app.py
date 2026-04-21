@@ -64,7 +64,11 @@ def load_inventory():
 
 def load_sales():
     sb = get_supabase()
-    res = sb.table("sales").select("*").order("sale_date", desc=True).execute()
+    try:
+        res = sb.table("sales").select("*").order("sale_date", desc=True).execute()
+    except Exception as e:
+        st.error(f"load_sales error: {str(e)}")
+        return pd.DataFrame()
     if res.data:
         df = pd.DataFrame(res.data)
         num_cols = ["actual_cash","box10_used","box20_used","box10_price","box20_price",
@@ -598,5 +602,4 @@ elif menu == "📈 กราฟวิเคราะห์":
             fig3=go.Figure()
             fig3.add_trace(go.Scatter(x=daily_g["sale_date"],y=daily_g["actual_cash"],name="ยอดสาขาแจ้ง",line=dict(color="#F59E0B",width=2.5)))
             fig3.add_trace(go.Scatter(x=daily_g["sale_date"],y=daily_g["expected"],name="ยอดระบบ",line=dict(color="#B45309",width=2.5,dash="dash")))
-            fig3.update_layout(height=380,font=dict(family="Sarabun"),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig3,use_container_width=True)
+            fig3.update_layout(height=380,font=dict(family="Sarabun"),p
