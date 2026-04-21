@@ -256,6 +256,36 @@ with st.sidebar:
         lbl = k[:22]+"..." if len(k)>22 else k
         st.markdown(f"<span style='font-size:.76rem'>{lbl}: <b style='color:{color}'>{v:,.0f} {unit}</b></span>",unsafe_allow_html=True)
 
+    st.divider()
+    st.markdown("**🗑️ ล้างข้อมูล**")
+    with st.expander("ล้างข้อมูลทั้งหมด"):
+        st.warning("⚠️ การลบข้อมูลไม่สามารถกู้คืนได้!")
+        del_choice = st.radio("เลือกประเภทข้อมูลที่ต้องการลบ",[
+            "ยอดขายทั้งหมด",
+            "สต็อกบรรจุภัณฑ์ทั้งหมด",
+            "ข้อมูลทั้งหมด (ยอดขาย + สต็อก)",
+        ], key="del_choice")
+        confirm_text = st.text_input("พิมพ์ 'ยืนยันลบ' เพื่อยืนยัน", key="del_confirm")
+        if st.button("🗑️ ลบข้อมูล", key="del_btn"):
+            if confirm_text == "ยืนยันลบ":
+                conn = get_conn()
+                if del_choice == "ยอดขายทั้งหมด":
+                    conn.execute("DELETE FROM sales")
+                    conn.commit(); conn.close()
+                    st.success("✅ ลบยอดขายทั้งหมดแล้วค่ะ")
+                elif del_choice == "สต็อกบรรจุภัณฑ์ทั้งหมด":
+                    conn.execute("DELETE FROM inventory")
+                    conn.commit(); conn.close()
+                    st.success("✅ ลบสต็อกทั้งหมดแล้วค่ะ")
+                else:
+                    conn.execute("DELETE FROM sales")
+                    conn.execute("DELETE FROM inventory")
+                    conn.commit(); conn.close()
+                    st.success("✅ ลบข้อมูลทั้งหมดแล้วค่ะ")
+                st.rerun()
+            else:
+                st.error("กรุณาพิมพ์ 'ยืนยันลบ' ให้ถูกต้องค่ะ")
+
 st.markdown('<div class="main-title">🥚 โปรแกรมตรวจเช็คยอดขายกับบรรจุภัณฑ์</div>',unsafe_allow_html=True)
 st.markdown('<div class="sub-title">ร้านรุนขนมไข่ไส้เนย · 18 สาขา · บันทึกถาวรด้วย SQLite</div>',unsafe_allow_html=True)
 
@@ -718,3 +748,4 @@ elif menu == "📈 กราฟวิเคราะห์":
             fig3.update_layout(height=380,font=dict(family="Sarabun"),
                 paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig3,use_container_width=True)
+ 
