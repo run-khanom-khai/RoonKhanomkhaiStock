@@ -18,8 +18,8 @@ BRANCH_MAP = {
 BRANCHES = list(BRANCH_MAP.keys())
 
 ITEM_TYPES = [
-    "กล่องใส (ขนมไข่ 10 ชิ้น)",
-    "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)",
+    "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)",
+    "กล่องใส (ขนมไข่ 20 ชิ้น)",
     "แก้ว ชาไทยสลัชชี่",
     "แก้ว ชาไทยเย็น",
     "แก้ว ชาน้ำผึ้งมะนาว",
@@ -27,8 +27,8 @@ ITEM_TYPES = [
     "ถุงหูหิ้ว ROON",
 ]
 ITEM_UNIT = {
-    "กล่องใส (ขนมไข่ 10 ชิ้น)":"กล่อง",
-    "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)":"ถุง",
+    "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)":"ถุง",
+    "กล่องใส (ขนมไข่ 20 ชิ้น)":"กล่อง",
     "แก้ว ชาไทยสลัชชี่":"แก้ว",
     "แก้ว ชาไทยเย็น":"แก้ว",
     "แก้ว ชาน้ำผึ้งมะนาว":"แก้ว",
@@ -38,22 +38,22 @@ ITEM_UNIT = {
 
 # คอลัมน์ยอดขาย: (label, used_col, price_col, default_price, item_type, unit, คำนวณเงิน?)
 PRODUCTS = [
-    ("กล่องใส 10ชิ้น",       "box10_used",         "box10_price",        70.0,  "กล่องใส (ขนมไข่ 10 ชิ้น)", "กล่อง", True),
-    ("ถุงกระดาษ 20ชิ้น",     "box20_used",         "box20_price",       130.0,  "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)", "ถุง", True),
+    ("ถุงกระดาษ 10ชิ้น",     "box10_used",         "box10_price",        70.0,  "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)", "ถุง", True),
+    ("กล่องใส 20ชิ้น",       "box20_used",         "box20_price",       130.0,  "กล่องใส (ขนมไข่ 20 ชิ้น)", "กล่อง", True),
     ("ชาไทยสลัชชี่",          "drink_thaitea_used", "drink_thaitea_price", 89.0, "แก้ว ชาไทยสลัชชี่", "แก้ว", True),
     ("ชาไทยเย็น",             "drink_milky_used",   "drink_milky_price",   79.0, "แก้ว ชาไทยเย็น", "แก้ว", True),
     ("ชาน้ำผึ้งมะนาว",        "drink_bright_used",  "drink_bright_price",  79.0, "แก้ว ชาน้ำผึ้งมะนาว", "แก้ว", True),
     ("ชาน้ำผึ้งมะนาวสลัชชี่", "drink_honey_used",   "drink_honey_price",   89.0, "แก้ว ชาน้ำผึ้งมะนาวสลัชชี่", "แก้ว", True),
     ("ถุงหูหิ้ว ROON",        "shopbag_used",       "shopbag_price",       15.0, "ถุงหูหิ้ว ROON", "ใบ", True),
     # ไม่คำนวณเงิน
-    ("Line Man กล่องใส",    "lineman_box10",  None, 0, "กล่องใส (ขนมไข่ 10 ชิ้น)", "กล่อง", False),
-    ("Line Man ถุงกระดาษ",  "lineman_box20",  None, 0, "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)", "ถุง", False),
-    ("Shopee กล่องใส",      "shopee_box10",   None, 0, "กล่องใส (ขนมไข่ 10 ชิ้น)", "กล่อง", False),
-    ("Shopee ถุงกระดาษ",    "shopee_box20",   None, 0, "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)", "ถุง", False),
-    ("TikTok กล่องใส",      "tiktok_box10",   None, 0, "กล่องใส (ขนมไข่ 10 ชิ้น)", "กล่อง", False),
-    ("TikTok ถุงกระดาษ",    "tiktok_box20",   None, 0, "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)", "ถุง", False),
-    ("Grab กล่องใส",         "grab_box10",     None, 0, "กล่องใส (ขนมไข่ 10 ชิ้น)", "กล่อง", False),
-    ("Grab ถุงกระดาษ",       "grab_box20",     None, 0, "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)", "ถุง", False),
+    ("Line Man ถุงกระดาษ",  "lineman_box10",  None, 0, "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)", "ถุง", False),
+    ("Line Man กล่องใส",    "lineman_box20",  None, 0, "กล่องใส (ขนมไข่ 20 ชิ้น)", "กล่อง", False),
+    ("Shopee ถุงกระดาษ",    "shopee_box10",   None, 0, "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)", "ถุง", False),
+    ("Shopee กล่องใส",      "shopee_box20",   None, 0, "กล่องใส (ขนมไข่ 20 ชิ้น)", "กล่อง", False),
+    ("TikTok ถุงกระดาษ",    "tiktok_box10",   None, 0, "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)", "ถุง", False),
+    ("TikTok กล่องใส",      "tiktok_box20",   None, 0, "กล่องใส (ขนมไข่ 20 ชิ้น)", "กล่อง", False),
+    ("Grab ถุงกระดาษ",       "grab_box10",     None, 0, "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)", "ถุง", False),
+    ("Grab กล่องใส",         "grab_box20",     None, 0, "กล่องใส (ขนมไข่ 20 ชิ้น)", "กล่อง", False),
 ]
 
 NON_PRICE_COLS = ["lineman_box10","lineman_box20","shopee_box10","shopee_box20",
@@ -83,7 +83,7 @@ def init_db():
         sale_date TEXT NOT NULL, branch_code TEXT NOT NULL,
         actual_cash REAL NOT NULL DEFAULT 0,
         box10_used REAL NOT NULL DEFAULT 0, box20_used REAL NOT NULL DEFAULT 0,
-        box10_price REAL NOT NULL DEFAULT 70, box20_price REAL NOT NULL DEFAULT 130,
+        box10_price REAL NOT NULL DEFAULT 130, box20_price REAL NOT NULL DEFAULT 70,
         drink_thaitea_used REAL NOT NULL DEFAULT 0, drink_milky_used REAL NOT NULL DEFAULT 0,
         drink_bright_used REAL NOT NULL DEFAULT 0, drink_honey_used REAL NOT NULL DEFAULT 0,
         drink_thaitea_price REAL NOT NULL DEFAULT 89, drink_milky_price REAL NOT NULL DEFAULT 79,
@@ -98,7 +98,7 @@ def init_db():
     existing = [r[1] for r in c.execute("PRAGMA table_info(sales)").fetchall()]
     new_cols = {
         "box10_used":"REAL NOT NULL DEFAULT 0","box20_used":"REAL NOT NULL DEFAULT 0",
-        "box10_price":"REAL NOT NULL DEFAULT 70","box20_price":"REAL NOT NULL DEFAULT 130",
+        "box10_price":"REAL NOT NULL DEFAULT 130","box20_price":"REAL NOT NULL DEFAULT 70",
         "drink_thaitea_used":"REAL NOT NULL DEFAULT 0","drink_milky_used":"REAL NOT NULL DEFAULT 0",
         "drink_bright_used":"REAL NOT NULL DEFAULT 0","drink_honey_used":"REAL NOT NULL DEFAULT 0",
         "drink_thaitea_price":"REAL NOT NULL DEFAULT 89","drink_milky_price":"REAL NOT NULL DEFAULT 79",
@@ -144,8 +144,8 @@ def get_stock_balance_by_branch(branch_code):
     box20_cols = ["box20_used","lineman_box20","shopee_box20","tiktok_box20","grab_box20"]
     drink_cols = ["drink_thaitea_used","drink_milky_used","drink_bright_used","drink_honey_used"]
     used_map = {
-        "กล่องใส (ขนมไข่ 10 ชิ้น)": box10_cols,
-        "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)": box20_cols,
+        "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)": box10_cols,
+        "กล่องใส (ขนมไข่ 20 ชิ้น)": box20_cols,
         "แก้ว ชาไทยสลัชชี่": ["drink_thaitea_used"],
         "แก้ว ชาไทยเย็น": ["drink_milky_used"],
         "แก้ว ชาน้ำผึ้งมะนาว": ["drink_bright_used"],
@@ -172,8 +172,8 @@ def get_stock_balance_total():
     sales_df = load_sales()
     result = {}
     used_map = {
-        "กล่องใส (ขนมไข่ 10 ชิ้น)": ["box10_used","lineman_box10","shopee_box10","tiktok_box10","grab_box10"],
-        "ถุงกระดาษ (ขนมไข่ 20 ชิ้น)": ["box20_used","lineman_box20","shopee_box20","tiktok_box20","grab_box20"],
+        "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)": ["box10_used","lineman_box10","shopee_box10","tiktok_box10","grab_box10"],
+        "กล่องใส (ขนมไข่ 20 ชิ้น)": ["box20_used","lineman_box20","shopee_box20","tiktok_box20","grab_box20"],
         "แก้ว ชาไทยสลัชชี่": ["drink_thaitea_used"],
         "แก้ว ชาไทยเย็น": ["drink_milky_used"],
         "แก้ว ชาน้ำผึ้งมะนาว": ["drink_bright_used"],
@@ -242,6 +242,7 @@ section[data-testid="stSidebar"]{background:linear-gradient(180deg,#FEF3C7 0%,#F
 with st.sidebar:
     st.markdown("### 🥚 รุนขนมไข่ไส้เนย")
     st.markdown("**สงขลา | 18 สาขา**")
+    st.markdown("<span style='font-size:.78rem;color:#92400E'>โดย ดร.อภิวรรณ์ ดำแสงสวัสดิ์</span>", unsafe_allow_html=True)
     st.divider()
     menu = st.radio("เมนู",[
         "📊 แดชบอร์ด","📦 จัดการสต็อกบรรจุภัณฑ์",
@@ -432,25 +433,25 @@ elif menu == "💰 บันทึกยอดขายรายวัน":
         st.markdown("---")
         st.markdown("#### 📦 ขนมไข่ (ยอดสาขา — คำนวณเงิน)")
         c1,c2,c3,c4=st.columns(4)
-        s10=bal.get("กล่องใส (ขนมไข่ 10 ชิ้น)",0)
-        s20=bal.get("ถุงกระดาษ (ขนมไข่ 20 ชิ้น)",0)
+        s10=bal.get("ถุงกระดาษ (ขนมไข่ 10 ชิ้น)",0)
+        s20=bal.get("กล่องใส (ขนมไข่ 20 ชิ้น)",0)
         with c1:
-            box10_used=st.number_input(f"กล่องใส 10ชิ้น (เหลือ {s10:,.0f} กล่อง)",
+            box10_used=st.number_input(f"ถุงกระดาษ 10ชิ้น (เหลือ {s10:,.0f} ถุง)",
                 min_value=0.0,step=1.0,format="%.0f",key="u_b10",
                 value=safe_get(prev,4) if prev else 0.0,
                 disabled=(s10<1))
             if s10<1: st.caption("ไม่มีบรรจุภัณฑ์นี้")
         with c2:
-            box10_price=st.number_input("ราคา/กล่อง (บาท)",value=safe_get(prev,6,70.0) if prev else 70.0,
+            box10_price=st.number_input("ราคา/ถุง (บาท)",value=safe_get(prev,6,70.0) if prev else 70.0,
                 min_value=0.0,step=5.0,key="p_b10")
         with c3:
-            box20_used=st.number_input(f"ถุงกระดาษ 20ชิ้น (เหลือ {s20:,.0f} ถุง)",
+            box20_used=st.number_input(f"กล่องใส 20ชิ้น (เหลือ {s20:,.0f} กล่อง)",
                 min_value=0.0,step=1.0,format="%.0f",key="u_b20",
                 value=safe_get(prev,5) if prev else 0.0,
                 disabled=(s20<1))
             if s20<1: st.caption("ไม่มีบรรจุภัณฑ์นี้")
         with c4:
-            box20_price=st.number_input("ราคา/ถุง (บาท)",value=safe_get(prev,7,130.0) if prev else 130.0,
+            box20_price=st.number_input("ราคา/กล่อง (บาท)",value=safe_get(prev,7,130.0) if prev else 130.0,
                 min_value=0.0,step=5.0,key="p_b20")
 
         st.markdown("#### 🧋 เครื่องดื่ม (คำนวณเงิน)")
@@ -491,17 +492,17 @@ elif menu == "💰 บันทึกยอดขายรายวัน":
         st.markdown("#### 🛵 Line Man / Shopee / TikTok / Grab (ตัดสต็อกเท่านั้น ไม่คำนวณเงิน)")
         lm1,lm2,lm3,lm4=st.columns(4)
         with lm1:
-            lineman_box10=st.number_input(f"Line Man กล่องใส (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="lm_b10",value=safe_get(prev,18) if prev else 0.0)
-            lineman_box20=st.number_input(f"Line Man ถุงกระดาษ (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="lm_b20",value=safe_get(prev,19) if prev else 0.0)
+            lineman_box10=st.number_input(f"Line Man ถุงกระดาษ (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="lm_b10",value=safe_get(prev,18) if prev else 0.0)
+            lineman_box20=st.number_input(f"Line Man กล่องใส (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="lm_b20",value=safe_get(prev,19) if prev else 0.0)
         with lm2:
-            shopee_box10=st.number_input(f"Shopee กล่องใส (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="sp_b10",value=safe_get(prev,20) if prev else 0.0)
-            shopee_box20=st.number_input(f"Shopee ถุงกระดาษ (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="sp_b20",value=safe_get(prev,21) if prev else 0.0)
+            shopee_box10=st.number_input(f"Shopee ถุงกระดาษ (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="sp_b10",value=safe_get(prev,20) if prev else 0.0)
+            shopee_box20=st.number_input(f"Shopee กล่องใส (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="sp_b20",value=safe_get(prev,21) if prev else 0.0)
         with lm3:
-            tiktok_box10=st.number_input(f"TikTok กล่องใส (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="tt_b10",value=safe_get(prev,22) if prev else 0.0)
-            tiktok_box20=st.number_input(f"TikTok ถุงกระดาษ (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="tt_b20",value=safe_get(prev,23) if prev else 0.0)
+            tiktok_box10=st.number_input(f"TikTok ถุงกระดาษ (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="tt_b10",value=safe_get(prev,22) if prev else 0.0)
+            tiktok_box20=st.number_input(f"TikTok กล่องใส (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="tt_b20",value=safe_get(prev,23) if prev else 0.0)
         with lm4:
-            grab_box10=st.number_input(f"Grab กล่องใส (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="gb_b10",value=safe_get(prev,24) if prev else 0.0)
-            grab_box20=st.number_input(f"Grab ถุงกระดาษ (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="gb_b20",value=safe_get(prev,25) if prev else 0.0)
+            grab_box10=st.number_input(f"Grab ถุงกระดาษ (เหลือ {s10:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="gb_b10",value=safe_get(prev,24) if prev else 0.0)
+            grab_box20=st.number_input(f"Grab กล่องใส (เหลือ {s20:,.0f})",min_value=0.0,step=1.0,format="%.0f",key="gb_b20",value=safe_get(prev,25) if prev else 0.0)
 
         note=st.text_input("หมายเหตุ",value=str(prev[26]) if prev and len(prev)>26 and prev[26] else "")
         st.markdown("---")
@@ -748,4 +749,3 @@ elif menu == "📈 กราฟวิเคราะห์":
             fig3.update_layout(height=380,font=dict(family="Sarabun"),
                 paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig3,use_container_width=True)
- 
