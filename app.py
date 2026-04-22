@@ -523,9 +523,10 @@ with st.sidebar:
     if role == "admin":
         menu_options = [
             "📊 แดชบอร์ด","📦 จัดการสต็อกบรรจุภัณฑ์",
-            "💰 บันทึกยอดขายรายวัน","📋 รายงานตรวจสอบ","📈 กราฟวิเคราะห์",
-            "🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา","🏪 จัดการสาขา",
-            "🔍 External Audit"
+            "💰 บันทึกยอดขายรายวัน",
+            "🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา",
+            "🔍 External Audit","🏪 จัดการสาขา",
+            "📋 รายงานตรวจสอบ","📈 กราฟวิเคราะห์"
         ]
     elif role == "purchase":
         menu_options = ["🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา"]
@@ -1023,7 +1024,221 @@ elif menu == "🏪 จัดการสาขา":
 # ══ EXTERNAL AUDIT ══
 elif menu == "🔍 External Audit":
     st.markdown('<div class="section-header">🔍 External Audit — นับสต็อกหน้าสาขา</div>', unsafe_allow_html=True)
-    tab1, tab2 = st.tabs(["➕ บันทึกยอดนับจริง", "📊 รายงาน Cross-check"])
+    THRESHOLD = 0  # ± 0 ไม่มีความคลาดเคลื่อนที่ยอมรับ
+
+    def run_crosscheck(audit_date, audit_branch, audit_data):
+        bal_branch = get_stock_balance_by_branch(audit_branch)
+        rows = []
+        has_alert = False
+        for item in ITEM_TYPES:
+            unit = ITEM_UNIT[item]
+            sys_expect = round(bal_branch.get(item, 0), 0)
+            audit_actual = round(audit_data.get(item, 0), 0)
+            diff = audit_actual - sys_expect
+            if abs(diff) <= THRESHOLD:
+                status = "✅ PASS"; risk = "ปกติ"
+            elif diff < 0:
+                status = "🚨 DIFF"; risk = f"ขาด {abs(diff):,.0f} {unit} — สงสัยโกง"; has_alert = True
+            else:
+                status = "⚠️ DIFF"; risk = f"เกิน {abs(diff):,.0f} {unit} — ตรวจสอบ"; has_alert = True
+            rows.append({"บรรจุภัณฑ์": item,
+                "ระบบคาดว่าเหลือ": f"{sys_expect:,.0f} {unit}",
+                "Audit นับได้": f"{audit_actual:,.0f} {unit}",
+                "ส่วนต่าง": f"{diff:+,.0f}",
+                "สถานะ": status, "หมายเหตุ": risk})
+        return pd.DataFrame(rows), has_alert
+
+    # ── บันทึกยอดนับจริง ──
+    c1, c2 = st.columns(2)
+    with c1:
+        audit_date = st.date_input("วันที่นับ (เช้าวันนี้)", value=date.today(), key="audit_date")
+    with c2:
+        audit_branch = st.selectbox("สาขา", BRANCHES,
+            format_func=lambda x: f"{x} — {BRANCH_MAP.get(x,'')}", key="audit_branch")
+
+    sb_c = get_supabase()
+    try:
+        ex_audit = sb_c.table("audit_stock").select("*")\
+            .eq("audit_date", str(audit_date)).eq("branch_code", audit_branch).execute()
+        existing_audit = {r["item_type"]: r for r in ex_audit.data} if ex_audit.data else {}
+    except:
+        existing_audit = {}
+
+    if existing_audit:
+        st.warning(f"⚠️ มีข้อมูล Audit วันที่ {audit_date} สาขา {audit_branch} แล้วค่ะ — แก้ไขได้เลย")
+
+    st.markdown("---")
+    st.markdown("**กรอกจำนวนบรรจุภัณฑ์ที่นับได้จริงหน้าสาขา**")
+    st.caption("นับสต็อกที่เหลือจริงหลังปิดสาขาเมื่อคืน ก่อนพนักงานเข้าทำงาน")
+
+    audit_inputs = {}
+    cols_a = st.columns(4)
+    for i, item in enumerate(ITEM_TYPES):
+        unit = ITEM_UNIT[item]
+        prev_val = float(existing_audit[item]["qty_actual"]) if item in existing_audit else 0.0
+        with cols_a[i % 4]:
+            audit_inputs[item] = st.number_input(
+                f"{item[:20]} ({unit})",
+                min_value=0.0, step=1.0, format="%.0f",
+                key=f"audit_{i}", value=prev_val)
+
+    note_audit = st.text_input("หมายเหตุ", key="audit_note")
+    st.markdown("---")
+
+    if st.button("💾 บันทึกและ Cross-check ทันที", use_container_width=True):
+        sb2 = get_supabase()
+        for item, qty in audit_inputs.items():
+            unit = ITEM_UNIT[item]
+            row = {"audit_date": str(audit_date), "branch_code": audit_branch,
+                   "item_type": item, "qty_actual": qty, "note": note_audit}
+            if item in existing_audit:
+                sb2.table("audit_stock").update(row).eq("id", existing_audit[item]["id"]).execute()
+            else:
+                sb2.table("audit_stock").insert(row).execute()
+        st.success(f"✅ บันทึก Audit แล้วค่ะ")
+        st.session_state["show_crosscheck"] = True
+        st.session_state["cc_branch"] = audit_branch
+        st.session_state["cc_date"] = str(audit_date)
+        st.session_state["cc_data"] = {k: v for k, v in audit_inputs.items()}
+        st.rerun()
+
+    # แสดง cross-check ทันทีหลังบันทึก
+    if st.session_state.get("show_crosscheck") and \
+       st.session_state.get("cc_branch") == audit_branch and \
+       st.session_state.get("cc_date") == str(audit_date):
+        st.markdown("---")
+        st.markdown(f"### 📊 ผล Cross-check — {BRANCH_MAP.get(audit_branch,'')} วันที่ {audit_date.strftime('%d/%m/%Y')}")
+        cc_data = st.session_state["cc_data"]
+        df_chk, has_alert = run_crosscheck(audit_date, audit_branch, cc_data)
+        st.dataframe(df_chk, use_container_width=True, hide_index=True)
+        if has_alert:
+            st.error("🚨 พบความผิดปกติ! ควรสอบสวนเพิ่มเติมค่ะ")
+        else:
+            st.success("✅ ยอดสอดคล้องกันทุกรายการค่ะ")
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as w:
+            df_chk.to_excel(w, index=False, sheet_name=f"Audit")
+        st.download_button("📥 Export Excel", data=buf.getvalue(),
+            file_name=f"audit_{audit_branch}_{audit_date}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    st.markdown("---")
+    st.markdown("### 📋 รายงาน Cross-check ทุกสาขา")
+    rpt_date2 = st.date_input("เลือกวันที่", value=date.today(), key="rpt_all_date")
+    sb5 = get_supabase()
+    try:
+        res_all2 = sb5.table("audit_stock").select("*").eq("audit_date", str(rpt_date2)).execute()
+        audit_all2 = pd.DataFrame(res_all2.data) if res_all2.data else pd.DataFrame()
+    except:
+        audit_all2 = pd.DataFrame()
+
+    if len(audit_all2) == 0:
+        st.info(f"ยังไม่มีข้อมูล Audit วันที่ {rpt_date2} ค่ะ")
+    else:
+        st.markdown(f"**วันที่ {rpt_date2.strftime('%d/%m/%Y')} — {len(audit_all2['branch_code'].unique())} สาขา**")
+        all_rows = []
+        for branch in sorted(audit_all2["branch_code"].unique()):
+            bal = get_stock_balance_by_branch(branch)
+            b_audit = audit_all2[audit_all2["branch_code"] == branch]
+            b_data = {r["item_type"]: r["qty_actual"] for _, r in b_audit.iterrows()}
+            df_b, alert = run_crosscheck(rpt_date2, branch, b_data)
+            df_b.insert(0, "สาขา", BRANCH_MAP.get(branch, branch))
+            all_rows.append(df_b)
+        if all_rows:
+            df_all_chk = pd.concat(all_rows, ignore_index=True)
+            st.dataframe(df_all_chk, use_container_width=True, hide_index=True)
+            buf2 = io.BytesIO()
+            with pd.ExcelWriter(buf2, engine="openpyxl") as w:
+                df_all_chk.to_excel(w, index=False, sheet_name=f"Audit_ทุกสาขา")
+            st.download_button("📥 Export Excel ทุกสาขา", data=buf2.getvalue(),
+                file_name=f"audit_all_{rpt_date2}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# ══ RISK SCORE ══
+elif menu == "📊 รายงาน Audit":
+    st.markdown('<div class="section-header">📊 Risk Score — ความเสี่ยงรายสาขา</div>', unsafe_allow_html=True)
+    THRESHOLD = 0
+
+    sales_df = load_sales()
+    if len(sales_df) == 0:
+        st.info("ยังไม่มีข้อมูลยอดขายค่ะ")
+    else:
+        st.markdown("**คะแนนความเสี่ยงคำนวณจากข้อมูลยอดขายทั้งหมดในระบบ**")
+        st.caption("Risk Score 0-100 | สูง = เสี่ยงสูง | แนะนำส่ง Audit ตรวจสาขาที่คะแนน > 50")
+        st.markdown("---")
+
+        risk_rows = []
+        for branch in BRANCHES:
+            df_b = sales_df[sales_df["branch_code"] == branch].copy() if len(sales_df) > 0 else pd.DataFrame()
+            if len(df_b) == 0:
+                continue
+            df_b["expected"] = df_b.apply(calc_expected, axis=1)
+            df_b["diff_abs"] = abs(df_b["actual_cash"] - df_b["expected"])
+            df_b["has_diff"] = df_b["diff_abs"] > 0.01
+
+            total = len(df_b)
+            diff_count = df_b["has_diff"].sum()
+            diff_rate = diff_count / total if total > 0 else 0
+            avg_diff = df_b["diff_abs"].mean()
+            max_diff = df_b["diff_abs"].max()
+
+            # คะแนน Risk (0-100)
+            score_diff_freq = min(diff_rate * 100, 40)        # ความถี่ DIFF (max 40 คะแนน)
+            score_avg_diff = min(avg_diff / 500 * 30, 30)     # ขนาด DIFF เฉลี่ย (max 30 คะแนน)
+            score_max_diff = min(max_diff / 1000 * 30, 30)    # DIFF สูงสุดเคย (max 30 คะแนน)
+            risk_score = round(score_diff_freq + score_avg_diff + score_max_diff, 0)
+
+            if risk_score >= 70:
+                level = "🔴 เสี่ยงสูง"
+                suggest = "ส่ง Audit ด่วน"
+            elif risk_score >= 40:
+                level = "🟡 เสี่ยงปานกลาง"
+                suggest = "ควรสุ่มตรวจ"
+            else:
+                level = "🟢 ปกติ"
+                suggest = "Monitor ต่อ"
+
+            risk_rows.append({
+                "รหัส": branch,
+                "ชื่อสาขา": BRANCH_MAP.get(branch, ""),
+                "ครั้งที่ Key in": total,
+                "DIFF (ครั้ง)": int(diff_count),
+                "อัตรา DIFF": f"{diff_rate*100:.0f}%",
+                "DIFF เฉลี่ย (฿)": f"{avg_diff:,.0f}",
+                "Risk Score": int(risk_score),
+                "ระดับความเสี่ยง": level,
+                "คำแนะนำ": suggest,
+            })
+
+        if not risk_rows:
+            st.info("ยังไม่มีข้อมูลเพียงพอค่ะ")
+        else:
+            df_risk = pd.DataFrame(risk_rows).sort_values("Risk Score", ascending=False)
+            st.dataframe(df_risk, use_container_width=True, hide_index=True)
+
+            high = len([r for r in risk_rows if r["Risk Score"] >= 70])
+            mid = len([r for r in risk_rows if 40 <= r["Risk Score"] < 70])
+            low = len([r for r in risk_rows if r["Risk Score"] < 40])
+            c1,c2,c3 = st.columns(3)
+            c1.metric("🔴 เสี่ยงสูง", f"{high} สาขา")
+            c2.metric("🟡 เสี่ยงปานกลาง", f"{mid} สาขา")
+            c3.metric("🟢 ปกติ", f"{low} สาขา")
+
+            st.markdown("---")
+            st.markdown("**📌 คำแนะนำ: สาขาที่ควรส่ง Audit สัปดาห์นี้**")
+            priority = df_risk[df_risk["Risk Score"] >= 40][["รหัส","ชื่อสาขา","Risk Score","ระดับความเสี่ยง","คำแนะนำ"]]
+            if len(priority) == 0:
+                st.success("ทุกสาขาอยู่ในระดับปกติค่ะ ไม่จำเป็นต้องส่ง Audit สัปดาห์นี้")
+            else:
+                st.dataframe(priority, use_container_width=True, hide_index=True)
+
+            buf3 = io.BytesIO()
+            with pd.ExcelWriter(buf3, engine="openpyxl") as w:
+                df_risk.to_excel(w, index=False, sheet_name="Risk_Score")
+            st.download_button("📥 Export Risk Score", data=buf3.getvalue(),
+                file_name="risk_score.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
     with tab1:
         c1, c2 = st.columns(2)
