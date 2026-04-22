@@ -176,49 +176,81 @@ section[data-testid="stSidebar"]{background:linear-gradient(180deg,#FEF3C7 0%,#F
 </style>
 """, unsafe_allow_html=True)
 
+# ── LOGIN ──
+if "role" not in st.session_state:
+    render_login()
+    st.stop()
+
+role = st.session_state["role"]
+
 # ── SIDEBAR ──
 with st.sidebar:
     st.markdown("### 🥚 รุนขนมไข่ไส้เนย")
     st.markdown("**สงขลา | 18 สาขา**")
     st.markdown("<span style='font-size:.78rem;color:#92400E'>โดย ดร.อภิวรรณ์ ดำแสงสวัสดิ์</span>", unsafe_allow_html=True)
+    role_label = {"admin":"👑 Admin","purchase":"🛒 จัดซื้อ","staff":"👤 Staff"}.get(role,"")
+    st.markdown(f"<span style='font-size:.78rem;color:#065F46'>{role_label}</span>", unsafe_allow_html=True)
     st.divider()
-    menu = st.radio("เมนู",[
-        "📊 แดชบอร์ด","📦 จัดการสต็อกบรรจุภัณฑ์",
-        "💰 บันทึกยอดขายรายวัน","📋 รายงานตรวจสอบ","📈 กราฟวิเคราะห์"
-    ], label_visibility="collapsed")
+
+    # เมนูตาม role
+    if role == "admin":
+        menu_options = [
+            "📊 แดชบอร์ด","📦 จัดการสต็อกบรรจุภัณฑ์",
+            "💰 บันทึกยอดขายรายวัน","📋 รายงานตรวจสอบ","📈 กราฟวิเคราะห์",
+            "🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา"
+        ]
+    elif role == "purchase":
+        menu_options = ["🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา"]
+    else:  # staff
+        menu_options = [
+            "📦 จัดการสต็อกบรรจุภัณฑ์",
+            "💰 บันทึกยอดขายรายวัน",
+            "📦 บันทึกวัตถุดิบสาขา"
+        ]
+
+    menu = st.radio("เมนู", menu_options, label_visibility="collapsed")
     st.divider()
-    st.markdown("**สต็อกรวมคงเหลือ**")
-    try:
-        bal = get_stock_balance_total()
-        for k,v in bal.items():
-            color = "#065F46" if v>50 else ("#FF6B00" if v>0 else "#991B1B")
-            unit = ITEM_UNIT.get(k,"ชิ้น")
-            lbl = k[:22]+"..." if len(k)>22 else k
-            st.markdown(f"<span style='font-size:.76rem'>{lbl}: <b style='color:{color}'>{v:,.0f} {unit}</b></span>",unsafe_allow_html=True)
-    except Exception as e:
-        st.caption("ไม่สามารถโหลดสต็อกได้")
-    st.divider()
-    st.markdown("**🗑️ ล้างข้อมูล**")
-    with st.expander("ล้างข้อมูลทั้งหมด"):
-        st.warning("⚠️ การลบข้อมูลไม่สามารถกู้คืนได้!")
-        del_choice = st.radio("เลือกประเภทข้อมูลที่ต้องการลบ",[
-            "ยอดขายทั้งหมด","สต็อกบรรจุภัณฑ์ทั้งหมด","ข้อมูลทั้งหมด (ยอดขาย + สต็อก)",
-        ], key="del_choice")
-        confirm_text = st.text_input("พิมพ์ 'ยืนยันลบ' เพื่อยืนยัน", key="del_confirm")
-        if st.button("🗑️ ลบข้อมูล", key="del_btn"):
-            if confirm_text == "ยืนยันลบ":
-                sb = get_supabase()
-                if del_choice == "ยอดขายทั้งหมด":
-                    sb.table("sales").delete().neq("id",0).execute()
-                elif del_choice == "สต็อกบรรจุภัณฑ์ทั้งหมด":
-                    sb.table("inventory").delete().neq("id",0).execute()
+
+    if role in ["admin","staff"]:
+        st.markdown("**สต็อกรวมคงเหลือ**")
+        try:
+            bal = get_stock_balance_total()
+            for k,v in bal.items():
+                color = "#065F46" if v>50 else ("#FF6B00" if v>0 else "#991B1B")
+                unit = ITEM_UNIT.get(k,"ชิ้น")
+                lbl = k[:22]+"..." if len(k)>22 else k
+                st.markdown(f"<span style='font-size:.76rem'>{lbl}: <b style='color:{color}'>{v:,.0f} {unit}</b></span>",unsafe_allow_html=True)
+        except:
+            st.caption("ไม่สามารถโหลดสต็อกได้")
+        st.divider()
+
+    if role == "admin":
+        st.markdown("**🗑️ ล้างข้อมูล**")
+        with st.expander("ล้างข้อมูลทั้งหมด"):
+            st.warning("⚠️ การลบข้อมูลไม่สามารถกู้คืนได้!")
+            del_choice = st.radio("เลือกประเภทข้อมูลที่ต้องการลบ",[
+                "ยอดขายทั้งหมด","สต็อกบรรจุภัณฑ์ทั้งหมด","ข้อมูลทั้งหมด (ยอดขาย + สต็อก)",
+            ], key="del_choice")
+            confirm_text = st.text_input("พิมพ์ 'ยืนยันลบ' เพื่อยืนยัน", key="del_confirm")
+            if st.button("🗑️ ลบข้อมูล", key="del_btn"):
+                if confirm_text == "ยืนยันลบ":
+                    sb = get_supabase()
+                    if del_choice == "ยอดขายทั้งหมด":
+                        sb.table("sales").delete().neq("id",0).execute()
+                    elif del_choice == "สต็อกบรรจุภัณฑ์ทั้งหมด":
+                        sb.table("inventory").delete().neq("id",0).execute()
+                    else:
+                        sb.table("sales").delete().neq("id",0).execute()
+                        sb.table("inventory").delete().neq("id",0).execute()
+                    st.success("✅ ลบข้อมูลแล้วค่ะ")
+                    st.rerun()
                 else:
-                    sb.table("sales").delete().neq("id",0).execute()
-                    sb.table("inventory").delete().neq("id",0).execute()
-                st.success("✅ ลบข้อมูลแล้วค่ะ")
-                st.rerun()
-            else:
-                st.error("กรุณาพิมพ์ 'ยืนยันลบ' ให้ถูกต้องค่ะ")
+                    st.error("กรุณาพิมพ์ 'ยืนยันลบ' ให้ถูกต้องค่ะ")
+
+    st.divider()
+    if st.button("🚪 ออกจากระบบ", key="logout_btn"):
+        del st.session_state["role"]
+        st.rerun()
 
 st.markdown('<div class="main-title">🥚 โปรแกรมตรวจเช็คยอดขายกับบรรจุภัณฑ์</div>',unsafe_allow_html=True)
 st.markdown('<div class="sub-title">ร้านรุนขนมไข่ไส้เนย · 18 สาขา · บันทึกถาวรด้วย Supabase</div>',unsafe_allow_html=True)
@@ -608,3 +640,320 @@ elif menu == "📈 กราฟวิเคราะห์":
             fig3.add_trace(go.Scatter(x=daily_g["sale_date_str"],y=daily_g["expected"],name="ยอดระบบ",line=dict(color="#B45309",width=2.5,dash="dash")))
             fig3.update_layout(height=380,font=dict(family="Sarabun"),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig3,use_container_width=True)
+
+elif menu == "🏭 สต็อกวัตถุดิบ HQ":
+    render_hq_stock_menu()
+
+elif menu == "📦 บันทึกวัตถุดิบสาขา":
+    render_branch_materials_menu()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# MATERIALS SYSTEM — วัตถุดิบสาขา + สต็อก HQ
+# ═══════════════════════════════════════════════════════════════════
+
+# รายการวัตถุดิบทั้งหมด พร้อมหน่วย และ fields ที่ต้องเก็บ
+# format: (ชื่อ, หน่วย, [fields: r=requisition, u=used, d=damaged, rem=remaining])
+MATERIALS = [
+    ("ไข่ไก่",                  "ฟอง",   ["r","u","d","rem"]),
+    ("ถุงแป้ง (ใหญ่)",          "ถุง",    ["r","u","rem"]),
+    ("ถุงแป้ง (เล็ก)",          "ถุง",    ["r","u","rem"]),
+    ("ถุงน้ำตาล (ใหญ่)",        "ถุง",    ["r","u","rem"]),
+    ("ถุงน้ำตาล (เล็ก)",        "ถุง",    ["r","u","rem"]),
+    ("ฝาปิดแก้ว",               "ใบ",    ["rem"]),
+    ("นมข้นหวาน",               "ถุง",    ["r","u","rem"]),
+    ("นมข้นจืด",                "ขวด",   ["r","u","rem"]),
+    ("สติกเกอร์ติดแก้ว",        "แผ่น",  ["rem"]),
+    ("ชาที่ยังไม่ผสม",          "แกลลอน",["rem"]),
+    ("ชาที่ผสม",                "แกลลอน",["rem"]),
+    ("แกลลอนเปล่า",             "ใบ",    ["rem"]),
+    ("เนย",                     "ก้อน",  ["rem"]),
+    ("ถุงหูหิ้ว 7×15",          "แพ็ค",  ["rem"]),
+    ("ถุงหูหิ้วใหญ่ 8×16",      "แพ็ค",  ["rem"]),
+    ("ถุงร้อน",                 "แพ็ค",  ["rem"]),
+    ("ไม้เสียบ",                "แพ็ค",  ["rem"]),
+    ("สายคาด",                  "เส้น",  ["rem"]),
+    ("ผงซักฟอก",                "ถุง",   ["rem"]),
+    ("น้ำยาล้างจาน",            "ถุง",   ["rem"]),
+    ("ไฮเตอร์",                 "ขวด",   ["rem"]),
+    ("กระดาษทิชชู่",            "ม้วน",  ["rem"]),
+    ("ถุงมือดำ M",              "กล่อง", ["rem"]),
+    ("ถุงมือดำ S",              "กล่อง", ["rem"]),
+    ("ถุงมือดำ L",              "กล่อง", ["rem"]),
+    ("ถุงมือใส",                "กล่อง", ["rem"]),
+    ("หมวกคลุมผม",              "แพ็ค",  ["rem"]),
+    ("ม้วนสลิป POS",            "ม้วน",  ["rem"]),
+    ("หน้ากากอนามัยสีดำ",       "กล่อง", ["rem"]),
+    ("ไฮเตอร์ (ขวด)",           "ขวด",   ["rem"]),
+    ("น้ำยาล้างจาน (ขวด)",      "ขวด",   ["rem"]),
+]
+
+FIELD_LABEL = {
+    "r":   "เบิกเข้า",
+    "u":   "ใช้ไป",
+    "d":   "เสีย",
+    "rem": "คงเหลือ",
+}
+
+def load_hq_stock():
+    sb = get_supabase()
+    try:
+        res = sb.table("hq_stock").select("*").order("entry_date", desc=True).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
+
+def load_branch_materials(report_date_str=None, branch_code=None):
+    sb = get_supabase()
+    try:
+        q = sb.table("branch_materials").select("*")
+        if report_date_str:
+            q = q.eq("report_date", report_date_str)
+        if branch_code:
+            q = q.eq("branch_code", branch_code)
+        res = q.order("report_date", desc=True).execute()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    except:
+        return pd.DataFrame()
+
+def get_hq_balance():
+    df = load_hq_stock()
+    result = {}
+    for name, unit, _ in MATERIALS:
+        if len(df) == 0:
+            result[name] = 0
+            continue
+        sub = df[df["item_name"] == name]
+        inc = pd.to_numeric(sub[sub["entry_kind"]=="นำเข้า"]["qty"], errors="coerce").sum()
+        out = pd.to_numeric(sub[sub["entry_kind"]=="เบิกออก"]["qty"], errors="coerce").sum()
+        result[name] = inc - out
+    return result
+
+
+def render_login():
+    st.markdown("""
+    <div style='max-width:400px;margin:80px auto;padding:2rem;background:var(--color-background-primary);
+    border:0.5px solid var(--color-border-tertiary);border-radius:16px;text-align:center'>
+    <div style='font-size:2rem;margin-bottom:.5rem'>🥚</div>
+    <div style='font-family:Prompt,sans-serif;font-size:1.3rem;font-weight:600;color:#B45309;margin-bottom:.3rem'>
+    รุนขนมไข่ไส้เนย</div>
+    <div style='font-size:.8rem;color:#92400E;margin-bottom:1.5rem'>โดย ดร.อภิวรรณ์ ดำแสงสวัสดิ์</div>
+    </div>
+    """, unsafe_allow_html=True)
+    col1,col2,col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("**กรุณาใส่รหัสผ่าน**")
+        pwd = st.text_input("รหัสผ่าน", type="password", key="login_pwd")
+        if st.button("เข้าสู่ระบบ", use_container_width=True):
+            PASSWORDS = {
+                "admin1234":    "admin",
+                "purchase99":   "purchase",
+                "branch2024":   "staff",
+            }
+            if pwd in PASSWORDS:
+                st.session_state["role"] = PASSWORDS[pwd]
+                st.rerun()
+            else:
+                st.error("รหัสผ่านไม่ถูกต้องค่ะ")
+
+
+def render_hq_stock_menu():
+    st.markdown('<div class="section-header">🏭 จัดการสต็อกวัตถุดิบ HQ</div>', unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.tabs(["➕ รับวัตถุดิบเข้า HQ", "📋 ประวัติ", "📊 สต็อกคงเหลือ HQ"])
+
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            hq_date = st.date_input("วันที่รับเข้า", value=date.today(), key="hq_date")
+        with c2:
+            entry_kind_hq = st.selectbox("ประเภท", ["นำเข้า", "เบิกออก"], key="hq_kind")
+        st.markdown("---")
+        st.markdown("**กรอกจำนวนวัตถุดิบที่รับ/เบิก**")
+        hq_bal = get_hq_balance()
+        cols = st.columns(4)
+        hq_inputs = {}
+        for i, (name, unit, _) in enumerate(MATERIALS):
+            rem = hq_bal.get(name, 0)
+            with cols[i % 4]:
+                hq_inputs[name] = st.number_input(
+                    f"{name} ({unit}) เหลือ {rem:,.0f}",
+                    min_value=0.0, step=1.0, format="%.0f", key=f"hq_{i}", value=0.0)
+        note_hq = st.text_input("หมายเหตุ", key="hq_note")
+        st.markdown("---")
+        if st.button("💾 บันทึกรายการ HQ", use_container_width=True):
+            sb = get_supabase()
+            saved = 0
+            for name, unit, _ in MATERIALS:
+                qty = hq_inputs[name]
+                if qty > 0:
+                    sb.table("hq_stock").insert({
+                        "entry_date": str(hq_date),
+                        "item_name": name, "qty": qty,
+                        "unit": unit, "entry_kind": entry_kind_hq,
+                        "note": note_hq
+                    }).execute()
+                    saved += 1
+            st.success(f"✅ บันทึก {saved} รายการแล้วค่ะ")
+            st.rerun()
+
+    with tab2:
+        df = load_hq_stock()
+        if len(df) == 0:
+            st.info("ยังไม่มีรายการค่ะ")
+        else:
+            f1, f2 = st.columns(2)
+            with f1:
+                fitem = st.selectbox("กรองวัตถุดิบ", ["ทั้งหมด"] + [m[0] for m in MATERIALS], key="hq_f_item")
+            with f2:
+                fkind = st.selectbox("ประเภท", ["ทั้งหมด", "นำเข้า", "เบิกออก"], key="hq_f_kind")
+            show = df.copy()
+            if fitem != "ทั้งหมด": show = show[show["item_name"] == fitem]
+            if fkind != "ทั้งหมด": show = show[show["entry_kind"] == fkind]
+            show = show[["entry_date","item_name","unit","qty","entry_kind","note"]].copy()
+            show.columns = ["วันที่","วัตถุดิบ","หน่วย","จำนวน","ประเภท","หมายเหตุ"]
+            st.dataframe(show, use_container_width=True, hide_index=True)
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as w:
+                show.to_excel(w, index=False, sheet_name="HQ_Stock")
+            st.download_button("📥 Export Excel", data=buf.getvalue(), file_name="hq_stock.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    with tab3:
+        hq_bal = get_hq_balance()
+        rows = [{"วัตถุดิบ": k, "คงเหลือ": v, "หน่วย": next((m[1] for m in MATERIALS if m[0]==k), "")}
+                for k, v in hq_bal.items()]
+        df_bal = pd.DataFrame(rows)
+        def color_bal(val):
+            if isinstance(val, (int, float)):
+                return "color:#991B1B;font-weight:bold" if val < 10 else "color:#065F46"
+            return ""
+        st.dataframe(df_bal.style.applymap(color_bal, subset=["คงเหลือ"]),
+                     use_container_width=True, hide_index=True)
+
+
+def render_branch_materials_menu():
+    st.markdown('<div class="section-header">📦 บันทึกวัตถุดิบสาขารายวัน</div>', unsafe_allow_html=True)
+    tab1, tab2 = st.tabs(["➕ บันทึกรายวัน", "📋 ประวัติ"])
+
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            mat_date = st.date_input("วันที่", value=date.today(), key="mat_date")
+        with c2:
+            mat_branch = st.selectbox("สาขา", BRANCHES,
+                format_func=lambda x: f"{x} — {BRANCH_MAP.get(x,'')}", key="mat_branch")
+
+        # เช็คข้อมูลซ้ำ
+        existing = load_branch_materials(str(mat_date), mat_branch)
+        if len(existing) > 0:
+            st.warning(f"⚠️ มีข้อมูลวันที่ {mat_date} สาขา {mat_branch} แล้วค่ะ — แก้ไขได้เลย")
+
+        st.markdown("---")
+        hq_bal = get_hq_balance()
+        mat_inputs = {}
+
+        for i, (name, unit, fields) in enumerate(MATERIALS):
+            hq_rem = hq_bal.get(name, 0)
+            st.markdown(f"**{i+1}. {name}** (หน่วย: {unit} | HQ เหลือ: {hq_rem:,.0f} {unit})")
+            cols_f = st.columns(len(fields) + 1)
+            mat_inputs[name] = {}
+
+            # หาค่าเดิมถ้ามี
+            prev_row = None
+            if len(existing) > 0:
+                prev_rows = existing[existing["item_name"] == name]
+                if len(prev_rows) > 0:
+                    prev_row = prev_rows.iloc[0]
+
+            for j, fkey in enumerate(fields):
+                label = FIELD_LABEL[fkey]
+                prev_val = float(prev_row[f"qty_{fkey}"] or 0) if prev_row is not None and f"qty_{fkey}" in prev_row else 0.0
+                with cols_f[j]:
+                    mat_inputs[name][fkey] = st.number_input(
+                        f"{label} ({unit})",
+                        min_value=0.0, step=1.0, format="%.0f",
+                        key=f"mat_{i}_{fkey}", value=prev_val)
+
+            with cols_f[-1]:
+                note_val = str(prev_row["note"] or "") if prev_row is not None and "note" in prev_row else ""
+                mat_inputs[name]["note"] = st.text_input("หมายเหตุ", key=f"mat_{i}_note", value=note_val)
+
+            st.markdown("---")
+
+        if st.button("💾 บันทึกวัตถุดิบทั้งหมด", use_container_width=True):
+            sb = get_supabase()
+            saved = updated = 0
+            for name, unit, fields in MATERIALS:
+                vals = mat_inputs[name]
+                has_data = any(vals.get(f, 0) > 0 for f in fields)
+                if not has_data and not vals.get("note"): continue
+
+                row_data = {
+                    "report_date": str(mat_date),
+                    "branch_code": mat_branch,
+                    "item_name": name,
+                    "unit": unit,
+                    "note": vals.get("note", "")
+                }
+                for fkey in fields:
+                    row_data[f"qty_{fkey}"] = vals.get(fkey, 0)
+
+                # ตัดสต็อก HQ อัตโนมัติเมื่อมีการเบิก
+                if "r" in fields and vals.get("r", 0) > 0:
+                    sb.table("hq_stock").insert({
+                        "entry_date": str(mat_date),
+                        "item_name": name, "qty": vals["r"],
+                        "unit": unit, "entry_kind": "เบิกออก",
+                        "note": f"สาขา {mat_branch} เบิก"
+                    }).execute()
+
+                # ลบของเก่าแล้ว insert ใหม่
+                if len(existing) > 0:
+                    prev_rows = existing[existing["item_name"] == name]
+                    if len(prev_rows) > 0:
+                        sb.table("branch_materials").delete().eq("id", int(prev_rows.iloc[0]["id"])).execute()
+                        updated += 1
+                    else:
+                        saved += 1
+                else:
+                    saved += 1
+                sb.table("branch_materials").insert(row_data).execute()
+
+            if saved > 0: st.success(f"✅ บันทึกใหม่ {saved} รายการค่ะ")
+            if updated > 0: st.warning(f"🔄 อัปเดต {updated} รายการค่ะ")
+            st.rerun()
+
+    with tab2:
+        c1, c2 = st.columns(2)
+        with c1:
+            hist_date = st.date_input("เลือกวันที่", value=date.today(), key="mat_hist_date")
+        with c2:
+            hist_branch = st.selectbox("สาขา", ["ทุกสาขา"] + BRANCHES,
+                format_func=lambda x: x if x=="ทุกสาขา" else f"{x} — {BRANCH_MAP.get(x,'')}",
+                key="mat_hist_branch")
+
+        df_h = load_branch_materials(
+            str(hist_date),
+            hist_branch if hist_branch != "ทุกสาขา" else None
+        )
+        if len(df_h) == 0:
+            st.warning(f"ไม่มีข้อมูล วันที่ {hist_date} ค่ะ")
+        else:
+            df_h["ชื่อสาขา"] = df_h["branch_code"].map(BRANCH_MAP)
+            show_cols = ["report_date","branch_code","ชื่อสาขา","item_name","unit"]
+            for col in ["qty_r","qty_u","qty_d","qty_rem"]:
+                if col in df_h.columns:
+                    show_cols.append(col)
+            show_cols.append("note")
+            show = df_h[[c for c in show_cols if c in df_h.columns]].copy()
+            rename = {"report_date":"วันที่","branch_code":"รหัส","item_name":"วัตถุดิบ",
+                      "unit":"หน่วย","qty_r":"เบิกเข้า","qty_u":"ใช้ไป",
+                      "qty_d":"เสีย","qty_rem":"คงเหลือ","note":"หมายเหตุ"}
+            show.rename(columns=rename, inplace=True)
+            st.dataframe(show, use_container_width=True, hide_index=True)
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as w:
+                show.to_excel(w, index=False, sheet_name=f"วัตถุดิบ_{hist_date}")
+            st.download_button("📥 Export Excel", data=buf.getvalue(),
+                file_name=f"materials_{hist_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
