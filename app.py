@@ -20,7 +20,7 @@ def init_db():
     except:
         pass
 
-BRANCH_MAP = {
+DEFAULT_BRANCH_MAP = {
     "0000":"Emporium","0004":"เดอะมอลล์ท่าพระ","0005":"เดอะมอลล์งามวงศ์วาน",
     "0006":"เดอะมอลล์บางแค","0007":"เดอะมอลล์บางกะปิ","0008":"เซ็นทรัล ลาดพร้าว",
     "0011":"เซ็นทรัล เวสเกต","0012":"ฟิวเจอร์พาร์ครังสิต","0013":"ซีคอน สแควร์ ศรีนครินทร์",
@@ -28,6 +28,18 @@ BRANCH_MAP = {
     "0018":"เซ็นทรัล หาดใหญ่","0019":"เดอะมอลล์โคราช","0020":"เอเชียทีค",
     "0021":"ตลาดสดธนบุรี","0022":"ซีคอน บางแค","0023":"ตลาดท่าเตียน",
 }
+
+def load_branches():
+    try:
+        sb = get_supabase()
+        res = sb.table("branches").select("*").order("branch_code").execute()
+        if res.data and len(res.data) > 0:
+            return {r["branch_code"]: r["branch_name"] for r in res.data}
+    except:
+        pass
+    return DEFAULT_BRANCH_MAP.copy()
+
+BRANCH_MAP = load_branches()
 BRANCHES = list(BRANCH_MAP.keys())
 ITEM_TYPES = [
     "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)","กล่องใส (ขนมไข่ 20 ชิ้น)",
@@ -479,6 +491,9 @@ html,body,[class*="css"]{font-family:'Sarabun',sans-serif}
 .main-title{font-family:'Prompt',sans-serif;font-size:1.6rem;font-weight:700;color:#B45309;margin-bottom:.1rem}
 .sub-title{font-size:.85rem;color:#92400E;margin-bottom:1.2rem}
 section[data-testid="stSidebar"]{background:linear-gradient(180deg,#FEF3C7 0%,#FFFBF0 100%);border-right:1px solid #FDE68A}
+section[data-testid="stSidebar"] *{color:#1a1a1a !important}
+section[data-testid="stSidebar"] .stRadio label{color:#1a1a1a !important;font-weight:500}
+section[data-testid="stSidebar"] p{color:#1a1a1a !important}
 .stButton>button{background:#B45309!important;color:white!important;border:none!important;border-radius:8px!important;font-family:'Sarabun',sans-serif!important;font-weight:600!important}
 .stButton>button:hover{background:#92400E!important}
 .section-header{font-family:'Prompt',sans-serif;font-size:1rem;font-weight:600;color:#78350F;border-left:4px solid #F59E0B;padding-left:10px;margin:1rem 0 .8rem}
@@ -508,7 +523,7 @@ with st.sidebar:
         menu_options = [
             "📊 แดชบอร์ด","📦 จัดการสต็อกบรรจุภัณฑ์",
             "💰 บันทึกยอดขายรายวัน","📋 รายงานตรวจสอบ","📈 กราฟวิเคราะห์",
-            "🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา"
+            "🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา","🏪 จัดการสาขา"
         ]
     elif role == "purchase":
         menu_options = ["🏭 สต็อกวัตถุดิบ HQ","📦 บันทึกวัตถุดิบสาขา"]
@@ -957,3 +972,45 @@ elif menu == "🏭 สต็อกวัตถุดิบ HQ":
 
 elif menu == "📦 บันทึกวัตถุดิบสาขา":
     render_branch_materials_menu()
+
+elif menu == "🏪 จัดการสาขา":
+    st.markdown('<div class="section-header">🏪 จัดการสาขา</div>', unsafe_allow_html=True)
+    tab1, tab2 = st.tabs(["➕ เพิ่ม/แก้ไขสาขา", "📋 รายชื่อสาขาทั้งหมด"])
+    with tab1:
+        st.markdown("**เพิ่มสาขาใหม่**")
+        c1, c2 = st.columns(2)
+        with c1:
+            new_code = st.text_input("รหัสสาขา (เช่น 0024)", max_chars=10, key="new_branch_code")
+        with c2:
+            new_name = st.text_input("ชื่อสาขา", key="new_branch_name")
+        if st.button("➕ เพิ่มสาขา", use_container_width=True):
+            if not new_code or not new_name:
+                st.error("กรุณากรอกรหัสและชื่อสาขาค่ะ")
+            elif new_code in BRANCH_MAP:
+                st.error(f"รหัส {new_code} มีอยู่แล้วค่ะ — {BRANCH_MAP[new_code]}")
+            else:
+                try:
+                    sb = get_supabase()
+                    sb.table("branches").insert({"branch_code": new_code, "branch_name": new_name}).execute()
+                    st.success(f"✅ เพิ่มสาขา {new_code} — {new_name} แล้วค่ะ")
+                    st.rerun()
+                except Exception as e:
+                    st.error("เกิดข้อผิดพลาดค่ะ — " + str(e))
+        st.markdown("---")
+        st.markdown("**แก้ไขชื่อสาขา**")
+        all_codes = list(BRANCH_MAP.keys())
+        edit_code = st.selectbox("เลือกสาขาที่ต้องการแก้ไข", all_codes,
+            format_func=lambda x: f"{x} — {BRANCH_MAP.get(x,'')}", key="edit_branch_sel")
+        edit_name = st.text_input("ชื่อสาขาใหม่", value=BRANCH_MAP.get(edit_code,""), key="edit_branch_name")
+        if st.button("💾 บันทึกการแก้ไข", use_container_width=True):
+            try:
+                sb = get_supabase()
+                sb.table("branches").upsert({"branch_code": edit_code, "branch_name": edit_name}).execute()
+                st.success(f"✅ แก้ไขสาขา {edit_code} เป็น {edit_name} แล้วค่ะ")
+                st.rerun()
+            except Exception as e:
+                st.error("เกิดข้อผิดพลาดค่ะ — " + str(e))
+    with tab2:
+        df_b = pd.DataFrame([{"รหัสสาขา": k, "ชื่อสาขา": v} for k,v in BRANCH_MAP.items()])
+        st.dataframe(df_b, use_container_width=True, hide_index=True)
+        st.info(f"สาขาทั้งหมด: {len(BRANCH_MAP)} สาขา")
