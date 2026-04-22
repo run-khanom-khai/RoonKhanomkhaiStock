@@ -602,4 +602,5 @@ elif menu == "📈 กราฟวิเคราะห์":
             fig3=go.Figure()
             fig3.add_trace(go.Scatter(x=daily_g["sale_date"],y=daily_g["actual_cash"],name="ยอดสาขาแจ้ง",line=dict(color="#F59E0B",width=2.5)))
             fig3.add_trace(go.Scatter(x=daily_g["sale_date"],y=daily_g["expected"],name="ยอดระบบ",line=dict(color="#B45309",width=2.5,dash="dash")))
-            fig3.update_layout(height=380,font=dict(family="Sarabun"),p
+            fig3.update_layout(height=380,font=dict(family="Sarabun"),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig3,use_container_width=True)
