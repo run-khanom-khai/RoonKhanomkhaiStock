@@ -46,7 +46,8 @@ PRODUCTS = [
     ("ชาไทยเย็น","drink_milky_used","drink_milky_price",79.0,"แก้ว ชาไทยเย็น","แก้ว",True),
     ("ชาน้ำผึ้งมะนาว","drink_bright_used","drink_bright_price",79.0,"แก้ว ชาน้ำผึ้งมะนาว","แก้ว",True),
     ("ชาน้ำผึ้งมะนาวสลัชชี่","drink_honey_used","drink_honey_price",89.0,"แก้ว ชาน้ำผึ้งมะนาวสลัชชี่","แก้ว",True),
-    ("ถุงหูหิ้ว ROON","shopbag_used","shopbag_price",15.0,"ถุงหูหิ้ว ROON","ใบ",True),
+    ("ถุงหูหิ้ว ROON (ขาย)","shopbag_used","shopbag_price",15.0,"ถุงหูหิ้ว ROON","ใบ",True),
+    ("Topping YUZU","yuzu_used","yuzu_price",15.0,None,None,True),
     ("Line Man ถุงกระดาษ","lineman_box10",None,0,"ถุงกระดาษ (ขนมไข่ 10 ชิ้น)","ถุง",False),
     ("Line Man กล่องใส","lineman_box20",None,0,"กล่องใส (ขนมไข่ 20 ชิ้น)","กล่อง",False),
     ("Shopee ถุงกระดาษ","shopee_box10",None,0,"ถุงกระดาษ (ขนมไข่ 10 ชิ้น)","ถุง",False),
@@ -101,7 +102,7 @@ def get_stock_balance_by_branch(branch_code):
         "แก้ว ชาไทยเย็น": ["drink_milky_used"],
         "แก้ว ชาน้ำผึ้งมะนาว": ["drink_bright_used"],
         "แก้ว ชาน้ำผึ้งมะนาวสลัชชี่": ["drink_honey_used"],
-        "ถุงหูหิ้ว ROON": ["shopbag_used"],
+        "ถุงหูหิ้ว ROON": ["shopbag_used","shopbag_free"],
     }
     result = {}
     inv_branch = inv_df[inv_df["branch_code"]==branch_code] if len(inv_df)>0 else pd.DataFrame()
@@ -128,7 +129,7 @@ def get_stock_balance_total():
         "แก้ว ชาไทยเย็น": ["drink_milky_used"],
         "แก้ว ชาน้ำผึ้งมะนาว": ["drink_bright_used"],
         "แก้ว ชาน้ำผึ้งมะนาวสลัชชี่": ["drink_honey_used"],
-        "ถุงหูหิ้ว ROON": ["shopbag_used"],
+        "ถุงหูหิ้ว ROON": ["shopbag_used","shopbag_free"],
     }
     result = {}
     for item in ITEM_TYPES:
@@ -391,14 +392,19 @@ elif menu == "💰 บันทึกยอดขายรายวัน":
                 drink_vals[uk]=st.number_input(f"{dname} (เหลือ {sv:,.0f} แก้ว)",min_value=0.0,step=1.0,format="%.0f",key=uk,value=safe_val(prev,ucol) if prev else 0.0,disabled=(sv<1))
                 if sv<1: st.caption("ไม่มีบรรจุภัณฑ์นี้")
                 drink_prices[pk]=st.number_input("ราคา/แก้ว",value=safe_val(prev,pcol,dp) if prev else dp,min_value=0.0,step=1.0,key=pk)
-        st.markdown("#### 🛒 ถุงหูหิ้ว ROON (คำนวณเงิน)")
-        sb1,sb2,_,_=st.columns(4)
+        st.markdown("#### 🛒 ถุงหูหิ้ว ROON + Topping YUZU")
+        sb1,sb2,sb3,sb4=st.columns(4)
         ssb=bal.get("ถุงหูหิ้ว ROON",0)
         with sb1:
-            shopbag_used=st.number_input(f"ถุงหูหิ้ว ROON (เหลือ {ssb:,.0f} ใบ)",min_value=0.0,step=1.0,format="%.0f",key="u_sb",value=safe_val(prev,"shopbag_used") if prev else 0.0,disabled=(ssb<1))
+            shopbag_used=st.number_input(f"ถุงหูหิ้ว ขาย (เหลือ {ssb:,.0f} ใบ)",min_value=0.0,step=1.0,format="%.0f",key="u_sb",value=safe_val(prev,"shopbag_used") if prev else 0.0,disabled=(ssb<1))
             if ssb<1: st.caption("ไม่มีบรรจุภัณฑ์นี้")
         with sb2:
-            shopbag_price=st.number_input("ราคา/ใบ",value=safe_val(prev,"shopbag_price",15.0) if prev else 15.0,min_value=0.0,step=1.0,key="p_sb")
+            shopbag_price=st.number_input("ราคา/ใบ (บาท)",value=safe_val(prev,"shopbag_price",15.0) if prev else 15.0,min_value=0.0,step=1.0,key="p_sb")
+        with sb3:
+            shopbag_free=st.number_input(f"ถุงหูหิ้ว ให้ฟรี (เหลือ {ssb:,.0f} ใบ)",min_value=0.0,step=1.0,format="%.0f",key="u_sb_free",value=safe_val(prev,"shopbag_free") if prev else 0.0,disabled=(ssb<1))
+        with sb4:
+            yuzu_used=st.number_input("Topping YUZU (ชิ้น)",min_value=0.0,step=1.0,format="%.0f",key="u_yuzu",value=safe_val(prev,"yuzu_used") if prev else 0.0)
+            yuzu_price=st.number_input("ราคา YUZU/ชิ้น",value=safe_val(prev,"yuzu_price",15.0) if prev else 15.0,min_value=0.0,step=1.0,key="p_yuzu")
         st.markdown("#### 🛵 Line Man / Shopee / TikTok / Grab (ตัดสต็อกเท่านั้น)")
         lm1,lm2,lm3,lm4=st.columns(4)
         with lm1:
@@ -418,7 +424,7 @@ elif menu == "💰 บันทึกยอดขายรายวัน":
         expected=(box10_used*box10_price+box20_used*box20_price+
                   drink_vals["u_tt"]*drink_prices["p_tt"]+drink_vals["u_mk"]*drink_prices["p_mk"]+
                   drink_vals["u_br"]*drink_prices["p_br"]+drink_vals["u_hn"]*drink_prices["p_hn"]+
-                  shopbag_used*shopbag_price)
+                  shopbag_used*shopbag_price+yuzu_used*yuzu_price)
         diff=actual_cash-expected
         is_diff=abs(diff)>0.01
         col_r1,col_r2,col_r3,col_r4=st.columns(4)
@@ -442,6 +448,8 @@ elif menu == "💰 บันทึกยอดขายรายวัน":
                 "drink_thaitea_price":drink_prices["p_tt"],"drink_milky_price":drink_prices["p_mk"],
                 "drink_bright_price":drink_prices["p_br"],"drink_honey_price":drink_prices["p_hn"],
                 "shopbag_used":shopbag_used,"shopbag_price":shopbag_price,
+                "shopbag_free":shopbag_free,
+                "yuzu_used":yuzu_used,"yuzu_price":yuzu_price,
                 "lineman_box10":lineman_box10,"lineman_box20":lineman_box20,
                 "shopee_box10":shopee_box10,"shopee_box20":shopee_box20,
                 "tiktok_box10":tiktok_box10,"tiktok_box20":tiktok_box20,
