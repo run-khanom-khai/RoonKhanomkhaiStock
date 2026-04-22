@@ -31,13 +31,11 @@ BRANCH_MAP = {
 BRANCHES = list(BRANCH_MAP.keys())
 ITEM_TYPES = [
     "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)","กล่องใส (ขนมไข่ 20 ชิ้น)",
-    "แก้ว ชาไทยสลัชชี่","แก้ว ชาไทยเย็น","แก้ว ชาน้ำผึ้งมะนาว",
-    "แก้ว ชาน้ำผึ้งมะนาวสลัชชี่","ถุงหูหิ้ว ROON",
+    "แก้วเครื่องดื่ม","ถุงหูหิ้ว ROON",
 ]
 ITEM_UNIT = {
     "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)":"ถุง","กล่องใส (ขนมไข่ 20 ชิ้น)":"กล่อง",
-    "แก้ว ชาไทยสลัชชี่":"แก้ว","แก้ว ชาไทยเย็น":"แก้ว",
-    "แก้ว ชาน้ำผึ้งมะนาว":"แก้ว","แก้ว ชาน้ำผึ้งมะนาวสลัชชี่":"แก้ว","ถุงหูหิ้ว ROON":"ใบ",
+    "แก้วเครื่องดื่ม":"แก้ว","ถุงหูหิ้ว ROON":"ใบ",
 }
 PRODUCTS = [
     ("ถุงกระดาษ 10ชิ้น","box10_used","box10_price",70.0,"ถุงกระดาษ (ขนมไข่ 10 ชิ้น)","ถุง",True),
@@ -98,10 +96,7 @@ def get_stock_balance_by_branch(branch_code):
     used_map = {
         "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)": box10_cols,
         "กล่องใส (ขนมไข่ 20 ชิ้น)": box20_cols,
-        "แก้ว ชาไทยสลัชชี่": ["drink_thaitea_used"],
-        "แก้ว ชาไทยเย็น": ["drink_milky_used"],
-        "แก้ว ชาน้ำผึ้งมะนาว": ["drink_bright_used"],
-        "แก้ว ชาน้ำผึ้งมะนาวสลัชชี่": ["drink_honey_used"],
+        "แก้วเครื่องดื่ม": ["drink_thaitea_used","drink_milky_used","drink_bright_used","drink_honey_used"],
         "ถุงหูหิ้ว ROON": ["shopbag_used","shopbag_free"],
     }
     result = {}
@@ -125,10 +120,7 @@ def get_stock_balance_total():
     used_map = {
         "ถุงกระดาษ (ขนมไข่ 10 ชิ้น)": ["box10_used","lineman_box10","shopee_box10","tiktok_box10","grab_box10"],
         "กล่องใส (ขนมไข่ 20 ชิ้น)": ["box20_used","lineman_box20","shopee_box20","tiktok_box20","grab_box20"],
-        "แก้ว ชาไทยสลัชชี่": ["drink_thaitea_used"],
-        "แก้ว ชาไทยเย็น": ["drink_milky_used"],
-        "แก้ว ชาน้ำผึ้งมะนาว": ["drink_bright_used"],
-        "แก้ว ชาน้ำผึ้งมะนาวสลัชชี่": ["drink_honey_used"],
+        "แก้วเครื่องดื่ม": ["drink_thaitea_used","drink_milky_used","drink_bright_used","drink_honey_used"],
         "ถุงหูหิ้ว ROON": ["shopbag_used","shopbag_free"],
     }
     result = {}
@@ -378,12 +370,14 @@ elif menu == "💰 บันทึกยอดขายรายวัน":
         with c4:
             box20_price=st.number_input("ราคา/กล่อง",value=safe_val(prev,"box20_price",130.0) if prev else 130.0,min_value=0.0,step=5.0,key="p_b20")
         st.markdown("#### 🧋 เครื่องดื่ม (คำนวณเงิน)")
+        s_cup=bal.get("แก้วเครื่องดื่ม",0)
+        st.caption(f"แก้วเครื่องดื่มคงเหลือรวม: {s_cup:,.0f} แก้ว")
         d1,d2,d3,d4=st.columns(4)
         drink_items=[
-            ("ชาไทยสลัชชี่","แก้ว ชาไทยสลัชชี่","drink_thaitea_used","drink_thaitea_price",89.0,"u_tt","p_tt"),
-            ("ชาไทยเย็น","แก้ว ชาไทยเย็น","drink_milky_used","drink_milky_price",79.0,"u_mk","p_mk"),
-            ("ชาน้ำผึ้งมะนาว","แก้ว ชาน้ำผึ้งมะนาว","drink_bright_used","drink_bright_price",79.0,"u_br","p_br"),
-            ("ชาน้ำผึ้งมะนาวสลัชชี่","แก้ว ชาน้ำผึ้งมะนาวสลัชชี่","drink_honey_used","drink_honey_price",89.0,"u_hn","p_hn"),
+            ("ชาไทยสลัชชี่","แก้วเครื่องดื่ม","drink_thaitea_used","drink_thaitea_price",89.0,"u_tt","p_tt"),
+            ("ชาไทยเย็น","แก้วเครื่องดื่ม","drink_milky_used","drink_milky_price",79.0,"u_mk","p_mk"),
+            ("ชาน้ำผึ้งมะนาว","แก้วเครื่องดื่ม","drink_bright_used","drink_bright_price",79.0,"u_br","p_br"),
+            ("ชาน้ำผึ้งมะนาวสลัชชี่","แก้วเครื่องดื่ม","drink_honey_used","drink_honey_price",89.0,"u_hn","p_hn"),
         ]
         drink_vals={}; drink_prices={}
         for col_obj,(dname,itype,ucol,pcol,dp,uk,pk) in zip([d1,d2,d3,d4],drink_items):
