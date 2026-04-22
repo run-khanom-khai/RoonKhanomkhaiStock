@@ -159,6 +159,32 @@ def safe_val(row, key, default=0.0):
     except:
         return default
 
+def render_login():
+    st.markdown("""
+    <div style='max-width:400px;margin:80px auto;padding:2rem;background:var(--color-background-primary);
+    border:0.5px solid var(--color-border-tertiary);border-radius:16px;text-align:center'>
+    <div style='font-size:2rem;margin-bottom:.5rem'>🥚</div>
+    <div style='font-family:Prompt,sans-serif;font-size:1.3rem;font-weight:600;color:#B45309;margin-bottom:.3rem'>
+    รุนขนมไข่ไส้เนย</div>
+    <div style='font-size:.8rem;color:#92400E;margin-bottom:1.5rem'>โดย ดร.อภิวรรณ์ ดำแสงสวัสดิ์</div>
+    </div>
+    """, unsafe_allow_html=True)
+    col1,col2,col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown("**กรุณาใส่รหัสผ่าน**")
+        pwd = st.text_input("รหัสผ่าน", type="password", key="login_pwd")
+        if st.button("เข้าสู่ระบบ", use_container_width=True):
+            PASSWORDS = {
+                "admin1234":    "admin",
+                "purchase99":   "purchase",
+                "branch2024":   "staff",
+            }
+            if pwd in PASSWORDS:
+                st.session_state["role"] = PASSWORDS[pwd]
+                st.rerun()
+            else:
+                st.error("รหัสผ่านไม่ถูกต้องค่ะ")
+
 # ── PAGE CONFIG ──
 st.set_page_config(page_title="โปรแกรมตรวจเช็คยอดขายกับบรรจุภัณฑ์", page_icon="🥚", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
@@ -176,7 +202,7 @@ section[data-testid="stSidebar"]{background:linear-gradient(180deg,#FEF3C7 0%,#F
 </style>
 """, unsafe_allow_html=True)
 
-# ── LOGIN ──
+# ── LOGIN ── (ต้องอยู่หลัง define functions ทั้งหมด)
 if "role" not in st.session_state:
     render_login()
     st.stop()
@@ -730,31 +756,6 @@ def get_hq_balance():
     return result
 
 
-def render_login():
-    st.markdown("""
-    <div style='max-width:400px;margin:80px auto;padding:2rem;background:var(--color-background-primary);
-    border:0.5px solid var(--color-border-tertiary);border-radius:16px;text-align:center'>
-    <div style='font-size:2rem;margin-bottom:.5rem'>🥚</div>
-    <div style='font-family:Prompt,sans-serif;font-size:1.3rem;font-weight:600;color:#B45309;margin-bottom:.3rem'>
-    รุนขนมไข่ไส้เนย</div>
-    <div style='font-size:.8rem;color:#92400E;margin-bottom:1.5rem'>โดย ดร.อภิวรรณ์ ดำแสงสวัสดิ์</div>
-    </div>
-    """, unsafe_allow_html=True)
-    col1,col2,col3 = st.columns([1,2,1])
-    with col2:
-        st.markdown("**กรุณาใส่รหัสผ่าน**")
-        pwd = st.text_input("รหัสผ่าน", type="password", key="login_pwd")
-        if st.button("เข้าสู่ระบบ", use_container_width=True):
-            PASSWORDS = {
-                "admin1234":    "admin",
-                "purchase99":   "purchase",
-                "branch2024":   "staff",
-            }
-            if pwd in PASSWORDS:
-                st.session_state["role"] = PASSWORDS[pwd]
-                st.rerun()
-            else:
-                st.error("รหัสผ่านไม่ถูกต้องค่ะ")
 
 
 def render_hq_stock_menu():
