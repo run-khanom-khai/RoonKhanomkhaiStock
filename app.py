@@ -472,13 +472,14 @@ elif menu == "📋 รายงานตรวจสอบ":
     st.markdown('<div class="section-header">รายงานตรวจสอบ</div>',unsafe_allow_html=True)
     sales_df=load_sales()
     report_date=st.date_input("เลือกวันที่",value=date.today())
-    report_tab1,report_tab2=st.tabs(["6.1 ยอดเงินแต่ละสาขา","6.2 บรรจุภัณฑ์แต่ละสาขา"])
+    report_tab1,report_tab2=st.tabs(["ยอดเงินแต่ละสาขา","บรรจุภัณฑ์แต่ละสาขา"])
     if len(sales_df)==0:
         st.warning("ไม่มีข้อมูลในระบบค่ะ")
     else:
         df=sales_df.copy()
-        df["sale_date"]=pd.to_datetime(df["sale_date"])
-        df=df[df["sale_date"]==pd.Timestamp(report_date)]
+        df["sale_date_str"]=df["sale_date"].astype(str).str[:10]
+        report_date_str=str(report_date)
+        df=df[df["sale_date_str"]==report_date_str]
         with report_tab1:
             st.markdown(f"**วันที่ {report_date.strftime('%d/%m/%Y')}**")
             if len(df)==0:
@@ -546,9 +547,10 @@ elif menu == "📈 กราฟวิเคราะห์":
     else:
         chart_date=st.date_input("เลือกวันที่",value=date.today(),key="chart_date")
         df_all=sales_df.copy()
-        df_all["sale_date"]=pd.to_datetime(df_all["sale_date"])
-        df_day=df_all[df_all["sale_date"]==pd.Timestamp(chart_date)]
-        tab1,tab2,tab3=st.tabs(["7.1 ยอดขาย+ส่วนต่างรายสาขา","7.2 บรรจุภัณฑ์รายสาขา","7.3 แนวโน้มรายวัน"])
+        df_all["sale_date_str"]=df_all["sale_date"].astype(str).str[:10]
+        chart_date_str=str(chart_date)
+        df_day=df_all[df_all["sale_date_str"]==chart_date_str]
+        tab1,tab2,tab3=st.tabs(["ยอดขาย+ส่วนต่างรายสาขา","บรรจุภัณฑ์รายสาขา","แนวโน้มรายวัน"])
         with tab1:
             if len(df_day)==0:
                 st.warning(f"ไม่มีข้อมูล วันที่ {chart_date.strftime('%d/%m/%Y')}")
@@ -598,9 +600,9 @@ elif menu == "📈 กราฟวิเคราะห์":
         with tab3:
             daily=df_all.copy()
             daily["expected"]=daily.apply(calc_expected,axis=1)
-            daily_g=daily.groupby("sale_date")[["actual_cash","expected"]].sum().reset_index()
+            daily_g=daily.groupby("sale_date_str")[["actual_cash","expected"]].sum().reset_index()
             fig3=go.Figure()
-            fig3.add_trace(go.Scatter(x=daily_g["sale_date"],y=daily_g["actual_cash"],name="ยอดสาขาแจ้ง",line=dict(color="#F59E0B",width=2.5)))
-            fig3.add_trace(go.Scatter(x=daily_g["sale_date"],y=daily_g["expected"],name="ยอดระบบ",line=dict(color="#B45309",width=2.5,dash="dash")))
+            fig3.add_trace(go.Scatter(x=daily_g["sale_date_str"],y=daily_g["actual_cash"],name="ยอดสาขาแจ้ง",line=dict(color="#F59E0B",width=2.5)))
+            fig3.add_trace(go.Scatter(x=daily_g["sale_date_str"],y=daily_g["expected"],name="ยอดระบบ",line=dict(color="#B45309",width=2.5,dash="dash")))
             fig3.update_layout(height=380,font=dict(family="Sarabun"),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)")
             st.plotly_chart(fig3,use_container_width=True)
