@@ -82,6 +82,47 @@ POSITIONS = ["พนักงานสาขา","หัวหน้าสาข
              "ฝ่ายจัดซื้อ","ฝ่ายตรวจสอบ","ฝ่ายการตลาด","ผู้บริหาร","อื่น ๆ"]
 
 # ===== ALL SHEETS =====
+SHEET_ASSETS        = "assets"
+SHEET_ASSET_REPAIRS = "asset_repairs"
+
+ASSET_CATEGORIES = ["เครื่องครัว","อุปกรณ์หน้าร้าน","อุปกรณ์สำนักงาน","เครื่องใช้ไฟฟ้า","อื่น ๆ"]
+ASSET_STATUSES   = ["ใช้งานอยู่","ส่งซ่อม","ชำรุด","เลิกใช้งาน","จำหน่ายออก","ลบแล้ว"]
+ASSET_LOCATIONS  = ["หน้าร้าน","หลังร้าน","ครัวกลาง","สำนักงาน","อื่น ๆ"]
+REPAIR_STATUSES  = ["กำลังซ่อม","ซ่อมเสร็จแล้ว","ยกเลิก","ซ่อมไม่ได้"]
+
+
+# ===== PETTY CASH SHEETS =====
+SHEET_PETTY_CASH_FUNDS        = "petty_cash_funds"
+SHEET_PETTY_CASH_TRANSACTIONS = "petty_cash_transactions"
+
+PETTY_CASH_ROLES   = ["branch_staff", "finance_hq", "admin"]
+PETTY_CASH_STATUSES = ["รอโอน", "โอนแล้ว", "ยกเลิก"]
+
+
+# ===== PETTY CASH REQUEST SHEETS =====
+SHEET_PETTY_CASH_REQUESTS     = "petty_cash_requests"
+SHEET_PETTY_CASH_ATTACHMENTS  = "petty_cash_attachments"
+
+PETTY_CASH_REQUEST_STATUSES = [
+    "draft", "submitted", "waiting_transfer",
+    "paid", "waiting_original_document", "rejected", "cancelled",
+]
+PETTY_CASH_REQUEST_STATUS_TH = {
+    "draft":                    "📝 แบบร่าง",
+    "submitted":                "📨 ส่งแล้ว",
+    "waiting_transfer":         "⏳ รอโอน",
+    "paid":                     "✅ โอนแล้ว",
+    "waiting_original_document":"📄 รอเอกสารจริง",
+    "rejected":                 "❌ ไม่อนุมัติ",
+    "cancelled":                "🚫 ยกเลิก",
+}
+PETTY_CASH_EXPENSE_TYPES = [
+    "ค่าเดินทาง", "ค่าอาหาร/เครื่องดื่ม", "ค่าวัสดุสำนักงาน",
+    "เบิกซื้อของภายในร้าน", "ค่าซ่อมแซมเล็กน้อย",
+    "ค่าสาธารณูปโภค", "ค่าขนส่ง", "ค่าทำความสะอาด", "อื่น ๆ",
+]
+PETTY_CASH_FILE_TYPES = ["receipt", "id_card", "travel_proof", "other"]
+
 ALL_SHEETS = [
     # Master
     SHEET_BRANCH_GROUPS, SHEET_AREA_MASTER, SHEET_BRANCHES,
@@ -108,7 +149,12 @@ ALL_SHEETS = [
     # Finance & Accounting
     SHEET_BANK_ACCOUNTS, SHEET_BANK_TRANSACTIONS,
     SHEET_DAILY_SALES_ACCOUNTING, SHEET_BRANCH_EXPENSES,
+    SHEET_PETTY_CASH_FUNDS, SHEET_PETTY_CASH_TRANSACTIONS,
+    SHEET_PETTY_CASH_REQUESTS, SHEET_PETTY_CASH_ATTACHMENTS,
+    # Asset Management
+    SHEET_ASSETS, SHEET_ASSET_REPAIRS,
     # Marketing
     SHEET_MARKETING_DAILY_SALES, SHEET_MARKETING_DAILY_SALES_ITEMS,
     SHEET_SALES_RECONCILE,
 ]
+
