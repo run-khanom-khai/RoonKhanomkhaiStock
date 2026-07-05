@@ -180,6 +180,7 @@ with st.sidebar:
         "🔎 Audit":               "audit",
         "💰 Finance":             "finance",
         "📒 Accounting":          "accounting",
+        "💵 เงินสดย่อย":          "petty_cash",
         "📈 Dashboard":           "dashboard",
         "📤 Export Data":         "export",
         "🗑️ Clear Data":          "clear_data",
@@ -240,6 +241,7 @@ elif selected == "branch_report":  _run("modules.branch_report")
 elif selected == "audit":          _run("modules.audit")
 elif selected == "finance":        _run("modules.finance")
 elif selected == "accounting":     _run("modules.accounting")
+elif selected == "petty_cash":     _run("modules.petty_cash")
 elif selected == "dashboard":      _run("modules.dashboard")
 elif selected == "export":         _render_export()
 elif selected == "clear_data":     _render_clear_data()
@@ -253,4 +255,3 @@ st.markdown(
     "ออกแบบและพัฒนาโดย <b>ดร.อภิวรรณ์ ดำแสงสวัสดิ์</b> | "
     "Copyright © 12/06/2026</p>",
     unsafe_allow_html=True)
- 
