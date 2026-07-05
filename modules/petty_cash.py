@@ -793,6 +793,32 @@ def _form_new_request(role: str):
             for e in errors: st.error(e)
             break
 
+        # ── ตรวจซ้ำ: พนักงาน + วันที่ + รายละเอียด เดียวกัน ──────
+        req_check = read_sheet(SHEET_PETTY_CASH_REQUESTS)
+        if not req_check.empty:
+            today_str = str(request_date)
+            dup_mask = (
+                (req_check["employee_id"].astype(str) == str(sel_emp_id)) &
+                (req_check["request_date"].astype(str) == today_str) &
+                (req_check["expense_detail"].astype(str).str.strip() == expense_detail.strip()) &
+                (~req_check["status"].astype(str).isin(["cancelled","rejected"]))
+            )
+            if "deleted_at" in req_check.columns:
+                dup_mask = dup_mask & (
+                    req_check["deleted_at"].astype(str).str.strip() == ""
+                )
+            if dup_mask.any():
+                dup_row = req_check[dup_mask].iloc[0]
+                dup_no = dup_row.get("request_no","")
+                st.warning(
+                    f"⚠️ รายการนี้บันทึกซ้ำ! "
+                    f"พนักงาน '{emp_name}' วันที่ {today_str} "
+                    f"รายละเอียด '{expense_detail.strip()}' "
+                    f"มีอยู่แล้ว (เลขที่: {dup_no}) "
+                    f"ถ้าต้องการบันทึกรายการใหม่ กรุณาเปลี่ยนรายละเอียดให้แตกต่างกันครับ"
+                )
+                break
+
         # ── บันทึก petty_cash_requests (snapshot ณ วันที่ทำรายการ) ──
         req_df     = read_sheet(SHEET_PETTY_CASH_REQUESTS)
         request_id = next_id(req_df, "request_id", "PCR")
