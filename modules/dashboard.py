@@ -128,7 +128,7 @@ def _tab_sales():
                      color="total_received", color_continuous_scale="Oranges",
                      labels={"branch_name":"สาขา","total_received":"ยอดขาย (฿)"},
                      text_auto=".2s")
-        fig.update_layout(showlegend=False, plot_bgcolor="white",
+        fig.update_layout(showlegend=False, plot_bgcolor="white", paper_bgcolor="white",
                           coloraxis_showscale=False, height=350)
         fig.update_traces(textfont_color="black")
         st.plotly_chart(fig, use_container_width=True)
@@ -145,7 +145,7 @@ def _tab_sales():
             fig2 = px.area(daily, x="วันที่", y="ยอดขาย",
                            color_discrete_sequence=[BRAND_COLOR],
                            labels={"ยอดขาย":"ยอดขาย (฿)"})
-            fig2.update_layout(plot_bgcolor="white", height=300)
+            fig2.update_layout(plot_bgcolor="white", paper_bgcolor="white", height=300)
             st.plotly_chart(fig2, use_container_width=True)
 
     # ── กราฟ 3: ช่องทางการขาย (Donut) ──────────────────────
@@ -199,7 +199,7 @@ def _tab_sales():
                                    y=merged["total_expense"], marker_color="#E53935"))
             fig5.add_trace(go.Bar(name="กำไร", x=merged["branch_name"],
                                    y=merged["กำไร"], marker_color="#2E7D32"))
-            fig5.update_layout(barmode="group", plot_bgcolor="white",
+            fig5.update_layout(barmode="group", plot_bgcolor="white", paper_bgcolor="white",
                                 height=300, legend=dict(font=dict(color="black")),
                                 font=dict(color="black"))
             st.plotly_chart(fig5, use_container_width=True)
@@ -266,7 +266,7 @@ def _tab_expenses():
                           barmode="stack",
                           labels={"branch_name":"สาขา","value":"฿","variable":"ประเภท"},
                           color_discrete_sequence=COLORS_MAIN)
-            fig2.update_layout(plot_bgcolor="white", height=350,
+            fig2.update_layout(plot_bgcolor="white", paper_bgcolor="white", height=350,
                                legend=dict(font=dict(color="black")), font=dict(color="black"))
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -280,7 +280,7 @@ def _tab_expenses():
                       barmode="group",
                       labels={"branch_name":"สาขา","value":"฿","variable":"รายการ"},
                       color_discrete_sequence=["#FF8F00","#7B1FA2","#1976D2","#E65100","#2E7D32"])
-        fig3.update_layout(plot_bgcolor="white", height=320,
+        fig3.update_layout(plot_bgcolor="white", paper_bgcolor="white", height=320,
                            legend=dict(font=dict(color="black")), font=dict(color="black"))
         st.plotly_chart(fig3, use_container_width=True)
 
@@ -300,7 +300,7 @@ def _tab_expenses():
                           color="กำไร%", color_continuous_scale="RdYlGn",
                           labels={"total_received":"ยอดขาย (฿)","total_expense":"ค่าใช้จ่าย (฿)"})
         fig4.update_traces(textposition="top center", textfont_color="black")
-        fig4.update_layout(height=350, plot_bgcolor="white",
+        fig4.update_layout(height=350, plot_bgcolor="white", paper_bgcolor="white",
                            coloraxis_colorbar=dict(tickfont=dict(color="black")))
         st.plotly_chart(fig4, use_container_width=True)
 
@@ -354,7 +354,7 @@ def _tab_stock():
                      color="สถานะ",
                      color_discrete_map={"🔴 ต่ำกว่าขั้นต่ำ":"#E53935","🟢 ปกติ":"#2E7D32"},
                      text_auto=True)
-        fig.update_layout(plot_bgcolor="white", height=350,
+        fig.update_layout(plot_bgcolor="white", paper_bgcolor="white", height=350,
                           legend=dict(font=dict(color="black")), font=dict(color="black"))
         fig.update_traces(textfont_color="black")
         st.plotly_chart(fig, use_container_width=True)
@@ -385,8 +385,15 @@ def _tab_stock():
                       color="มูลค่า", color_continuous_scale="Blues",
                       text_auto=".2s",
                       labels={"มูลค่า":"มูลค่า Stock (฿)"})
-        fig3.update_layout(plot_bgcolor="white", height=320,
-                           coloraxis_showscale=False, font=dict(color="black"))
+        fig3.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            height=320,
+            coloraxis_showscale=False,
+            font=dict(color="black", size=12),
+            xaxis=dict(tickfont=dict(color="black"), title_font=dict(color="black")),
+            yaxis=dict(tickfont=dict(color="black"), title_font=dict(color="black")),
+        )
         fig3.update_traces(textfont_color="black")
         st.plotly_chart(fig3, use_container_width=True)
 
@@ -409,6 +416,21 @@ def _tab_audit():
     with c1: _kpi("🔎 Audit ทั้งหมด",  total_a,            "#1976D2")
     with c2: _kpi("⚠️ มี DIFF",        diff_a,  "#E53935")
     with c3: _kpi("✅ ผ่าน",           total_a - diff_a,   "#2E7D32")
+
+    # ── ประวัติ Audit Sessions ──────────────────────────────────
+    if not ses_df.empty:
+        _h2("📋 ประวัติ Audit Sessions")
+        show_ses = ses_df.copy()
+        if "branch_id" in show_ses.columns:
+            show_ses["ชื่อสาขา"] = show_ses["branch_id"].map(bname).fillna(show_ses["branch_id"])
+        display_cols = [c for c in [
+            "audit_id","audit_date","audit_for_date","ชื่อสาขา",
+            "overall_status","behavior_remark","auditor_id"
+        ] if c in show_ses.columns or c == "ชื่อสาขา"]
+        st.dataframe(
+            show_ses[[c for c in display_cols if c in show_ses.columns]],
+            use_container_width=True
+        )
 
     if diff_df.empty:
         st.divider(); _no_data("ยังไม่มีข้อมูล DIFF"); return
@@ -433,8 +455,12 @@ def _tab_audit():
                          color="รวมส่วนต่าง", color_continuous_scale="Reds",
                          text_auto=True,
                          labels={"item_name":"รายการ","ครั้ง":"จำนวนครั้งที่ DIFF"})
-            fig.update_layout(plot_bgcolor="white", height=320,
-                              coloraxis_showscale=False, font=dict(color="black"))
+            fig.update_layout(
+                plot_bgcolor="white", paper_bgcolor="white", height=320,
+                coloraxis_showscale=False, font=dict(color="black", size=12),
+                xaxis=dict(tickfont=dict(color="black"), title_font=dict(color="black")),
+                yaxis=dict(tickfont=dict(color="black"), title_font=dict(color="black")),
+            )
             fig.update_traces(textfont_color="black")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -446,7 +472,11 @@ def _tab_audit():
                           if False else "diff_qty",
                           hole=0.45, color_discrete_sequence=COLORS_MAIN)
             fig2.update_traces(textfont_color="black", textinfo="percent+label")
-            fig2.update_layout(height=320, legend=dict(font=dict(color="black")))
+            fig2.update_layout(
+                height=320, paper_bgcolor="white",
+                legend=dict(font=dict(color="black")),
+                font=dict(color="black"),
+            )
             st.plotly_chart(fig2, use_container_width=True)
 
     # ── DIFF by branch ───────────────────────────────────────
@@ -466,8 +496,15 @@ def _tab_audit():
                       color="รวมส่วนต่าง", color_continuous_scale="OrRd",
                       text_auto=True,
                       labels={"ครั้งที่DIFF":"จำนวนครั้ง"})
-        fig3.update_layout(plot_bgcolor="white", height=300,
-                           coloraxis_showscale=False, font=dict(color="black"))
+        fig3.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            height=300,
+            coloraxis_showscale=False,
+            font=dict(color="black", size=12),
+            xaxis=dict(tickfont=dict(color="black"), title_font=dict(color="black")),
+            yaxis=dict(tickfont=dict(color="black"), title_font=dict(color="black")),
+        )
         fig3.update_traces(textfont_color="black")
         st.plotly_chart(fig3, use_container_width=True)
 
@@ -520,7 +557,7 @@ def _tab_hr():
                      barmode="stack",
                      labels={"full_name":"พนักงาน","value":"฿","variable":"ประเภท"},
                      color_discrete_sequence=["#1976D2","#FF8F00","#2E7D32"])
-        fig.update_layout(plot_bgcolor="white", height=350,
+        fig.update_layout(plot_bgcolor="white", paper_bgcolor="white", height=350,
                           legend=dict(font=dict(color="black")), font=dict(color="black"))
         st.plotly_chart(fig, use_container_width=True)
 
@@ -554,7 +591,7 @@ def _tab_hr():
                                    y=comp["ยอดขาย"], marker_color=BRAND_COLOR))
             fig3.add_trace(go.Bar(name="ค่าจ้าง", x=comp["สาขา"],
                                    y=comp["ค่าจ้าง"], marker_color="#1976D2"))
-            fig3.update_layout(barmode="group", plot_bgcolor="white", height=320,
+            fig3.update_layout(barmode="group", plot_bgcolor="white", paper_bgcolor="white", height=320,
                                legend=dict(font=dict(color="black")), font=dict(color="black"))
             st.plotly_chart(fig3, use_container_width=True)
 
@@ -600,7 +637,7 @@ def _tab_finance():
                       color="current_balance", color_continuous_scale="Purples",
                       text_auto=".2s",
                       labels={"label":"ธนาคาร","current_balance":"ยอดคงเหลือ (฿)"})
-        fig2.update_layout(plot_bgcolor="white", height=380,
+        fig2.update_layout(plot_bgcolor="white", paper_bgcolor="white", height=380,
                            coloraxis_showscale=False, font=dict(color="black"))
         fig2.update_traces(textfont_color="black")
         st.plotly_chart(fig2, use_container_width=True)
