@@ -236,7 +236,23 @@ def _form_add_staff(branches: dict):
         if errs:
             for e in errs: st.error(e)
             return
-        df  = read_sheet(SHEET_PETTY_CASH_FUNDS)
+
+        # ── ตรวจสอบพนักงานซ้ำ (ชื่อเดียวกัน + สาขาเดียวกัน) ──
+        df = read_sheet(SHEET_PETTY_CASH_FUNDS)
+        if not df.empty:
+            dup = df[
+                (df["staff_name"].astype(str).str.strip() == staff_name.strip()) &
+                (df["branch_name"].astype(str).str.strip() == branch_name.strip()) &
+                (df.get("is_active", pd.Series(["TRUE"]*len(df))).astype(str).str.upper() == "TRUE")
+            ]
+            if not dup.empty:
+                st.warning(
+                    f"⚠️ **'{staff_name}'** ของสาขา **{branch_name}** "
+                    f"ได้บันทึกแล้วครับ (ID: {dup.iloc[0]['fund_id']}) "
+                    f"— ไม่ต้องเพิ่มซ้ำครับ"
+                )
+                return
+
         fid = next_id(df, "fund_id", "PCF")
         now = _now()
         append_row(SHEET_PETTY_CASH_FUNDS, {
