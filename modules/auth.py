@@ -181,3 +181,4 @@ def render_manage_passwords():
             from modules.excel_db import update_row
             update_row(SHEET_AUTH, "dept_id", sel_dept, {"pw_hash": _hash(new_pw)})
             st.success(f"✅ เปลี่ยนรหัสผ่าน {dept_opts[sel_dept]} สำเร็จ")
+# updated 
