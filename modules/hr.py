@@ -143,9 +143,13 @@ def _form_add_employee(branches):
                                           min_value=0.0, step=50.0)
             branch_opts = list(branches.keys()) if branches else []
             branch_id   = st.selectbox(
-                "สาขา *", [""] + branch_opts,
-                format_func=lambda k: f"{k} – {branches.get(k,'')}" if k else "– กรุณาเลือกสาขา –"
+                "สาขา * (รหัส – ชื่อสาขา)",
+                [""] + branch_opts,
+                format_func=lambda k: f"{k} – {branches.get(k,'')}" if k else "– กรุณาเลือกสาขา –",
+                help="เลือกสาขาให้ตรงกับสาขาในระบบเงินสดย่อย"
             )
+            if branch_id:
+                st.caption(f"✅ สาขาที่เลือก: {branch_id} – {branches.get(branch_id,'')}")
             start_date = st.date_input("วันเริ่มงาน")
             status     = st.selectbox("สถานะ", EMPLOYEE_STATUSES)
 
