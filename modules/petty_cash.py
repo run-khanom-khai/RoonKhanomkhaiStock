@@ -346,10 +346,18 @@ def _form_new_request(role: str):
     emp_df = read_sheet(SHEET_EMPLOYEES)
     branch_emps = pd.DataFrame()
     if not emp_df.empty:
-        # กรองพนักงานของสาขาที่เลือก + status active
+        # กรองพนักงานของสาขาที่เลือก
         mask = emp_df["branch_id"].astype(str) == str(sel_branch_id)
+        # กรอง status — รับทั้ง active, Active, ปฏิบัติงาน
+        # ถ้าไม่มี status หรือว่าง → แสดงทั้งหมด (ไม่กรอง resigned เท่านั้น)
         if "status" in emp_df.columns:
-            mask = mask & (emp_df["status"].astype(str) == "active")
+            status_mask = (
+                (emp_df["status"].astype(str).str.lower() == "active") |
+                (emp_df["status"].astype(str).str.strip() == "") |
+                (emp_df["status"].astype(str).str.lower() == "nan") |
+                (~emp_df["status"].astype(str).str.lower().isin(["resigned","on_leave","ลาออก","ลาพัก"]))
+            )
+            mask = mask & status_mask
         branch_emps = emp_df[mask].copy()
 
     if branch_emps.empty:
