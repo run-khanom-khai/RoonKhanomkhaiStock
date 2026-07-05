@@ -347,26 +347,36 @@ def _form_new_request(role: str):
     branch_emps = pd.DataFrame()
     if not emp_df.empty:
         # กรองพนักงานของสาขาที่เลือก
-        mask = emp_df["branch_id"].astype(str) == str(sel_branch_id)
-        # กรอง status — รับทั้ง active, Active, ปฏิบัติงาน
-        # ถ้าไม่มี status หรือว่าง → แสดงทั้งหมด (ไม่กรอง resigned เท่านั้น)
+        # ใช้ทั้ง branch_id และ branch_name เพื่อป้องกันข้อมูลไม่ตรงกัน
+        mask_by_id   = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()
+        mask_by_name = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_name).strip()
+        mask = mask_by_id | mask_by_name
+
+        # กรอง status — ไม่แสดงเฉพาะคนที่ลาออกแล้ว
         if "status" in emp_df.columns:
-            status_mask = (
-                (emp_df["status"].astype(str).str.lower() == "active") |
-                (emp_df["status"].astype(str).str.strip() == "") |
-                (emp_df["status"].astype(str).str.lower() == "nan") |
-                (~emp_df["status"].astype(str).str.lower().isin(["resigned","on_leave","ลาออก","ลาพัก"]))
+            status_mask = ~emp_df["status"].astype(str).str.lower().isin(
+                ["resigned","on_leave","ลาออก","ลาพัก"]
             )
             mask = mask & status_mask
+
         branch_emps = emp_df[mask].copy()
 
     if branch_emps.empty:
+        # แสดงข้อมูล debug ช่วยหาปัญหา
+        debug_info = ""
+        if not emp_df.empty and "branch_id" in emp_df.columns:
+            unique_branches = emp_df["branch_id"].astype(str).unique().tolist()
+            debug_info = (
+                f"<br><small style='color:#888;'>"
+                f"(สาขาที่เลือก: <b>{sel_branch_id}</b> | "
+                f"สาขาในระบบ HR: {', '.join(unique_branches[:5])})</small>"
+            )
         st.markdown(
             "<div style='background:#FFF3E0;border:2px solid #FF8F00;"
             "border-radius:8px;padding:14px;color:#E65100;'>"
             "⚠️ <b>ไม่พบข้อมูลพนักงานของสาขานี้</b><br>"
             "กรุณาเพิ่มข้อมูลที่เมนู <b>HR &gt; เพิ่มพนักงาน</b> "
-            "ก่อนทำรายการเงินสดย่อย</div>",
+            f"ก่อนทำรายการเงินสดย่อย{debug_info}</div>",
             unsafe_allow_html=True,
         )
         return
