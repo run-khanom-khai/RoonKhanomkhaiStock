@@ -362,11 +362,8 @@ def _form_new_request(role: str):
     emp_df = read_sheet(SHEET_EMPLOYEES)
     branch_emps = pd.DataFrame()
     if not emp_df.empty:
-        # กรองพนักงานของสาขาที่เลือก
-        # ใช้ทั้ง branch_id และ branch_name เพื่อป้องกันข้อมูลไม่ตรงกัน
-        mask_by_id   = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()
-        mask_by_name = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_name).strip()
-        mask = mask_by_id | mask_by_name
+        # กรองพนักงานด้วย branch_id ตรงๆ (field เดียวกับ HR)
+        mask = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()
 
         # กรอง status — ไม่แสดงเฉพาะคนที่ลาออกแล้ว
         if "status" in emp_df.columns:
@@ -378,21 +375,14 @@ def _form_new_request(role: str):
         branch_emps = emp_df[mask].copy()
 
     if branch_emps.empty:
-        # แสดงข้อมูล debug ช่วยหาปัญหา
-        debug_info = ""
-        if not emp_df.empty and "branch_id" in emp_df.columns:
-            unique_branches = emp_df["branch_id"].astype(str).unique().tolist()
-            debug_info = (
-                f"<br><small style='color:#888;'>"
-                f"(สาขาที่เลือก: <b>{sel_branch_id}</b> | "
-                f"สาขาในระบบ HR: {', '.join(unique_branches[:5])})</small>"
-            )
         st.markdown(
             "<div style='background:#FFF3E0;border:2px solid #FF8F00;"
             "border-radius:8px;padding:14px;color:#E65100;'>"
             "⚠️ <b>ไม่พบข้อมูลพนักงานของสาขานี้</b><br>"
             "กรุณาเพิ่มข้อมูลที่เมนู <b>HR &gt; เพิ่มพนักงาน</b> "
-            f"ก่อนทำรายการเงินสดย่อย{debug_info}</div>",
+            "ก่อนทำรายการเงินสดย่อย<br>"
+            f"<small style='color:#888;'>รหัสสาขาที่เลือก: <b>{sel_branch_id}</b></small>"
+            "</div>",
             unsafe_allow_html=True,
         )
         return
