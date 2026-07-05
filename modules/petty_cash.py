@@ -159,18 +159,16 @@ def render():
     )
     st.divider()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "👤 ข้อมูลพนักงานสาขา",
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📝 บันทึกเบิกเงินสดย่อย",
         "⏳ รายการรอโอน",
         "📋 ประวัติการโอน",
         "📊 รายงานเงินสดย่อย",
     ])
-    with tab1: _render_staff_info(petty_role)
-    with tab2: _render_request_form(petty_role)
-    with tab3: _render_pending(petty_role)
-    with tab4: _render_history(petty_role)
-    with tab5: _render_report(petty_role)
+    with tab1: _render_request_form(petty_role)
+    with tab2: _render_pending(petty_role)
+    with tab3: _render_history(petty_role)
+    with tab4: _render_report(petty_role)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -179,92 +177,217 @@ def render():
 def _render_staff_info(role: str):
     st.subheader("👤 ข้อมูลพนักงานสาขา (ผู้รับเงินสดย่อย)")
 
-    df = read_sheet(SHEET_PETTY_CASH_FUNDS)
+    br_df    = read_sheet(SHEET_BRANCHES)
     branches = _branches_dict()
+    funds_df = read_sheet(SHEET_PETTY_CASH_FUNDS)
 
-    if role == "branch_staff":
-        user_branch = _get_user_branch()
-        if user_branch and not df.empty:
-            df = df[df["branch_name"].astype(str) == user_branch]
-
-    if not df.empty:
-        active = df[df.get("is_active", pd.Series(["TRUE"]*len(df))).astype(str).str.upper() == "TRUE"]
-        st.dataframe(active[[c for c in [
-            "fund_id","branch_name","staff_name","staff_position",
-            "phone","bank_name","bank_account_no","fund_limit","current_balance",
-        ] if c in active.columns]], use_container_width=True)
-        st.caption(f"พบ {len(active)} รายการ")
+    # ── แสดงรายการที่ลงทะเบียนแล้ว ──────────────────────────
+    if not funds_df.empty:
+        active = funds_df[
+            funds_df.get("is_active", pd.Series(["TRUE"]*len(funds_df)))
+            .astype(str).str.upper() == "TRUE"
+        ]
+        if role == "branch_staff":
+            user_branch = _get_user_branch()
+            if user_branch:
+                active = active[active["branch_name"].astype(str) == user_branch]
+        if not active.empty:
+            st.dataframe(active[[c for c in [
+                "fund_id","branch_name","staff_name",
+                "phone","bank_name","bank_account_no","fund_limit",
+            ] if c in active.columns]], use_container_width=True)
+            st.caption(f"ลงทะเบียนแล้ว {len(active)} คน")
     else:
-        st.info("ยังไม่มีข้อมูลพนักงานสาขา")
+        st.info("ยังไม่มีพนักงานลงทะเบียนรับเงินสดย่อย")
 
     st.divider()
 
     if role in ["admin","finance_hq"]:
         action = st.radio("การดำเนินการ",
-                          ["➕ เพิ่มพนักงาน","✏️ แก้ไขพนักงาน"],
+                          ["➕ เพิ่มพนักงาน (ดึงจาก HR)","✏️ แก้ไขวงเงิน"],
                           horizontal=True, key="staff_action")
-        if action == "➕ เพิ่มพนักงาน":
-            _form_add_staff(branches)
+        if action == "➕ เพิ่มพนักงาน (ดึงจาก HR)":
+            _form_add_staff_from_hr(branches, funds_df)
         else:
-            _form_edit_staff(df, branches)
+            _form_edit_staff_limit(funds_df)
     else:
         st.info("💡 ติดต่อฝ่ายการเงิน HQ เพื่อเพิ่มหรือแก้ไขข้อมูลพนักงานครับ")
 
 
-def _form_add_staff(branches: dict):
-    with st.form("form_add_petty_staff"):
-        st.markdown("#### ➕ เพิ่มพนักงานผู้รับเงินสดย่อย")
-        c1, c2 = st.columns(2)
-        with c1:
-            br_list     = list(branches.values()) if branches else ["ยังไม่มีสาขา"]
-            branch_name = st.selectbox("สาขา *", br_list)
-            staff_name  = st.text_input("ชื่อพนักงาน *")
-            staff_pos   = st.text_input("ตำแหน่ง")
-            phone       = st.text_input("เบอร์โทร")
-        with c2:
-            bank_name     = st.text_input("ชื่อธนาคาร *")
-            bank_acc_no   = st.text_input("เลขที่บัญชี *")
-            bank_acc_name = st.text_input("ชื่อบัญชี *")
-            fund_limit    = st.number_input("วงเงินสดย่อย (บาท) *", min_value=0.0, step=500.0)
-        saved = st.form_submit_button("💾 บันทึก", type="primary")
-    if saved:
-        errs = []
-        if not staff_name.strip():   errs.append("กรุณากรอกชื่อพนักงาน")
-        if not bank_name.strip():    errs.append("กรุณากรอกชื่อธนาคาร")
-        if not bank_acc_no.strip():  errs.append("กรุณากรอกเลขที่บัญชี")
-        if not bank_acc_name.strip():errs.append("กรุณากรอกชื่อบัญชี")
-        if errs:
-            for e in errs: st.error(e)
+def _form_add_staff_from_hr(branches: dict, funds_df: pd.DataFrame):
+    """เพิ่มพนักงานโดยดึงข้อมูลจาก HR — รอรับแค่ วงเงินสดย่อย"""
+    st.markdown("#### ➕ เพิ่มพนักงานผู้รับเงินสดย่อย (ดึงจาก HR)")
+    st.caption("เลือกสาขา → เลือกพนักงาน → ระบบดึงข้อมูลจาก HR อัตโนมัติ")
+
+    # ── ① เลือกสาขา ──────────────────────────────────────────
+    br_keys = list(branches.keys()) if branches else []
+    if not br_keys:
+        st.warning("ยังไม่มีสาขาในระบบ"); return
+
+    sel_branch_id = st.selectbox(
+        "① เลือกสาขา *",
+        br_keys,
+        format_func=lambda k: f"{k} – {branches.get(k,k)}",
+        key="add_staff_branch",
+    )
+    sel_branch_name = branches.get(sel_branch_id, sel_branch_id)
+
+    # ── ② เลือกพนักงานจาก HR ─────────────────────────────────
+    emp_df = read_sheet(SHEET_EMPLOYEES)
+    if emp_df.empty:
+        st.warning("⚠️ ยังไม่มีข้อมูลพนักงานใน HR กรุณาเพิ่มที่เมนู HR → เพิ่มพนักงาน ก่อนครับ")
+        return
+
+    # กรองพนักงานสาขานั้น
+    br_emps = emp_df[
+        emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()
+    ].copy()
+
+    if br_emps.empty:
+        st.markdown(
+            f"<div style='background:#FFF3E0;border:2px solid #FF8F00;"
+            f"border-radius:8px;padding:12px;color:#E65100;'>"
+            f"⚠️ ไม่พบพนักงานของสาขา <b>{sel_branch_id} – {sel_branch_name}</b> ใน HR<br>"
+            f"กรุณาเพิ่มพนักงานที่เมนู <b>HR → เพิ่มพนักงาน</b> ก่อนครับ</div>",
+            unsafe_allow_html=True,
+        )
+        return
+
+    # กรองคนที่ลงทะเบียนแล้ว
+    registered_ids = []
+    if not funds_df.empty:
+        registered_ids = funds_df["staff_name"].astype(str).tolist()
+
+    br_emps["full_name"] = br_emps["first_name"].astype(str) + " " + br_emps["last_name"].astype(str)
+    emp_opts = br_emps["employee_id"].tolist()
+
+    sel_emp_id = st.selectbox(
+        "② เลือกพนักงาน *",
+        emp_opts,
+        format_func=lambda x: (
+            f"{br_emps[br_emps['employee_id']==x]['full_name'].values[0]} "
+            f"({'✅ ลงทะเบียนแล้ว' if br_emps[br_emps['employee_id']==x]['full_name'].values[0] in registered_ids else ''})"
+        ),
+        key="add_staff_emp",
+    )
+    emp_row  = br_emps[br_emps["employee_id"] == sel_emp_id].iloc[0]
+    emp_name = emp_row["full_name"]
+
+    # ── ③ แสดงข้อมูลจาก HR (read-only) ──────────────────────
+    st.markdown(
+        f"<div style='background:#E3F2FD;border:1.5px solid #1565C0;"
+        f"border-radius:8px;padding:12px;margin:8px 0;color:#000000;'>"
+        f"<b style='color:#1565C0;'>ข้อมูลจาก HR (ดึงอัตโนมัติ)</b>"
+        f"<table style='width:100%;margin-top:6px;'>"
+        f"<tr><td style='color:#000;font-weight:600;width:130px;'>👤 ชื่อ</td>"
+        f"<td style='color:#000;'><b>{emp_name}</b></td></tr>"
+        f"<tr><td style='color:#000;font-weight:600;'>📞 เบอร์โทร</td>"
+        f"<td style='color:#000;'>{emp_row.get('phone','-') or '-'}</td></tr>"
+        f"<tr><td style='color:#000;font-weight:600;'>📧 e-mail</td>"
+        f"<td style='color:#000;'>{emp_row.get('email','-') or '-'}</td></tr>"
+        f"<tr><td style='color:#000;font-weight:600;'>🏦 ธนาคาร</td>"
+        f"<td style='color:#000;'>{emp_row.get('bank_name','-') or '-'} "
+        f"สาขา {emp_row.get('bank_branch','-') or '-'}</td></tr>"
+        f"<tr><td style='color:#000;font-weight:600;'>💳 เลขบัญชี</td>"
+        f"<td style='color:#000;'><code style='color:#000;'>{emp_row.get('bank_account_no','-') or '-'}</code></td></tr>"
+        f"<tr><td style='color:#000;font-weight:600;'>👤 ชื่อบัญชี</td>"
+        f"<td style='color:#000;'>{emp_row.get('bank_account_name','-') or '-'}</td></tr>"
+        f"</table></div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── ④ รอรับแค่วงเงินสดย่อย ──────────────────────────────
+    st.divider()
+    st.markdown("**④ กำหนดวงเงินสดย่อย**")
+
+    # ตรวจว่าลงทะเบียนแล้วหรือยัง
+    if not funds_df.empty:
+        dup = funds_df[
+            (funds_df["staff_name"].astype(str).str.strip() == emp_name.strip()) &
+            (funds_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()) &
+            (funds_df.get("is_active", pd.Series(["TRUE"]*len(funds_df)))
+             .astype(str).str.upper() == "TRUE")
+        ]
+        if not dup.empty:
+            st.warning(
+                f"⚠️ **{emp_name}** ได้ลงทะเบียนแล้ว (ID: {dup.iloc[0]['fund_id']}) "
+                f"— ไม่ต้องเพิ่มซ้ำครับ"
+            )
             return
 
-        # ── ตรวจสอบพนักงานซ้ำ (ชื่อเดียวกัน + สาขาเดียวกัน) ──
-        df = read_sheet(SHEET_PETTY_CASH_FUNDS)
-        if not df.empty:
-            dup = df[
-                (df["staff_name"].astype(str).str.strip() == staff_name.strip()) &
-                (df["branch_name"].astype(str).str.strip() == branch_name.strip()) &
-                (df.get("is_active", pd.Series(["TRUE"]*len(df))).astype(str).str.upper() == "TRUE")
-            ]
-            if not dup.empty:
-                st.warning(
-                    f"⚠️ **'{staff_name}'** ของสาขา **{branch_name}** "
-                    f"ได้บันทึกแล้วครับ (ID: {dup.iloc[0]['fund_id']}) "
-                    f"— ไม่ต้องเพิ่มซ้ำครับ"
-                )
-                return
+    fund_limit = st.number_input(
+        "วงเงินสดย่อย (บาท) *",
+        min_value=0.0, step=500.0,
+        help="กำหนดวงเงินสูงสุดที่พนักงานคนนี้เบิกได้ต่อครั้ง"
+    )
 
-        fid = next_id(df, "fund_id", "PCF")
+    if st.button("💾 บันทึกพนักงาน", type="primary", use_container_width=True,
+                  key="btn_save_staff"):
+        if fund_limit <= 0:
+            st.error("❌ กรุณากำหนดวงเงินสดย่อย (ต้องมากกว่า 0 บาท)")
+            return
+
+        df_funds = read_sheet(SHEET_PETTY_CASH_FUNDS)
+        fid = next_id(df_funds, "fund_id", "PCF")
         now = _now()
         append_row(SHEET_PETTY_CASH_FUNDS, {
-            "fund_id": fid, "branch_id":"","branch_name":branch_name,
-            "staff_name":staff_name.strip(),"staff_position":staff_pos,
-            "phone":phone,"bank_name":bank_name.strip(),
-            "bank_account_no":bank_acc_no.strip(),
-            "bank_account_name":bank_acc_name.strip(),
-            "fund_limit":fund_limit,"current_balance":0.0,
-            "is_active":"TRUE","created_at":now,"updated_at":now,
+            "fund_id":          fid,
+            "branch_id":        sel_branch_id,
+            "branch_name":      sel_branch_name,
+            "staff_name":       emp_name,
+            "staff_position":   emp_row.get("position",""),
+            "phone":            emp_row.get("phone",""),
+            "bank_name":        emp_row.get("bank_name",""),
+            "bank_account_no":  emp_row.get("bank_account_no",""),
+            "bank_account_name":emp_row.get("bank_account_name",""),
+            "fund_limit":       fund_limit,
+            "current_balance":  0.0,
+            "is_active":        "TRUE",
+            "created_at":       now,
+            "updated_at":       now,
         })
-        st.success(f"✅ เพิ่มพนักงาน '{staff_name}' สำเร็จ (ID: {fid})")
+        st.success(
+            f"✅ ลงทะเบียน **{emp_name}** สาขา {sel_branch_name} "
+            f"วงเงิน ฿{fund_limit:,.2f} สำเร็จ! (ID: {fid})"
+        )
+        st.rerun()
+
+
+def _form_edit_staff_limit(funds_df: pd.DataFrame):
+    """แก้ไขวงเงินสดย่อยเท่านั้น"""
+    st.markdown("#### ✏️ แก้ไขวงเงินสดย่อย")
+    if funds_df.empty:
+        st.info("ยังไม่มีพนักงานลงทะเบียน"); return
+
+    opts = funds_df["fund_id"].tolist()
+    sel  = st.selectbox(
+        "เลือกพนักงาน", opts,
+        format_func=lambda x: (
+            f"{funds_df[funds_df['fund_id']==x]['staff_name'].values[0]} "
+            f"— {funds_df[funds_df['fund_id']==x]['branch_name'].values[0]}"
+        ), key="edit_fund_sel"
+    )
+    row = funds_df[funds_df["fund_id"] == sel].iloc[0]
+    try:    cur_limit = float(row.get("fund_limit", 0))
+    except: cur_limit = 0.0
+
+    st.info(
+        f"👤 {row.get('staff_name','')} | "
+        f"🏪 {row.get('branch_name','')} | "
+        f"💰 วงเงินปัจจุบัน: ฿{cur_limit:,.2f}"
+    )
+    new_limit = st.number_input(
+        "วงเงินใหม่ (บาท)", min_value=0.0,
+        step=500.0, value=cur_limit, key="new_limit"
+    )
+    if st.button("💾 บันทึกวงเงินใหม่", type="primary", key="btn_save_limit"):
+        if new_limit <= 0:
+            st.error("วงเงินต้องมากกว่า 0 บาท"); return
+        update_row(SHEET_PETTY_CASH_FUNDS, "fund_id", sel, {
+            "fund_limit": new_limit,
+            "updated_at": _now(),
+        })
+        st.success(f"✅ แก้ไขวงเงินเป็น ฿{new_limit:,.2f} สำเร็จ")
         st.rerun()
 
 
