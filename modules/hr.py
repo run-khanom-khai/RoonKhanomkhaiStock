@@ -1,7 +1,7 @@
 """
 hr.py  –  ระบบ HR และเงินเดือนพนักงาน (รอบที่ 6)
 """
-import io, datetime
+import io, re, datetime
 import streamlit as st
 import pandas as pd
 
@@ -118,14 +118,19 @@ def _form_add_employee(branches):
         with c1:
             first_name = st.text_input("ชื่อ *", key="add_fn")
             last_name  = st.text_input("นามสกุล *", key="add_ln")
-            age        = st.number_input("อายุ", min_value=15, max_value=70, step=1)
             birthdate  = st.date_input(
-                "วันเกิด (date_of_birth)",
+                "วันเกิด *",
                 min_value=datetime.date(1980, 1, 1),
                 max_value=datetime.date.today(),
                 value=datetime.date(1990, 1, 1),
-                help="เลือกปีเกิดได้ตั้งแต่ปี 1980 ถึงวันปัจจุบัน"
+                help="ระบบจะคำนวณอายุจากวันเกิดอัตโนมัติ"
             )
+            # คำนวณอายุอัตโนมัติจากวันเกิด
+            today = datetime.date.today()
+            age = today.year - birthdate.year - (
+                (today.month, today.day) < (birthdate.month, birthdate.day)
+            )
+            st.info(f"🎂 อายุ: **{age} ปี** (คำนวณจากวันเกิดอัตโนมัติ)")
         with c2:
             email = st.text_input("e-mail", placeholder="example@email.com")
             phone = st.text_input("เบอร์โทรศัพท์ *",
@@ -185,10 +190,10 @@ def _form_add_employee(branches):
             errors.append("เบอร์โทรศัพท์ต้องเป็นตัวเลข 8-15 หลัก")
         if email.strip() and not re.match(r"^[\w\.\-]+@[\w\.\-]+\.\w{2,}$", email.strip()):
             errors.append("รูปแบบ e-mail ไม่ถูกต้อง เช่น example@email.com")
-        if birthdate < datetime.date(1980, 1, 1):
-            errors.append("วันเกิดต้องไม่ก่อนปี 1980")
-        if birthdate > datetime.date.today():
-            errors.append("วันเกิดต้องไม่เกินวันที่ปัจจุบัน")
+        # birthdate ถูกจำกัดด้วย min_value/max_value แล้ว
+        # ตรวจอายุต้องไม่น้อยกว่า 15 ปี
+        if age < 15:
+            errors.append("อายุพนักงานต้องไม่น้อยกว่า 15 ปี")
         if not bank_account_no.strip() and not promptpay_no.strip():
             errors.append("ต้องมีอย่างน้อย เลขที่บัญชี หรือ หมายเลข PromptPay")
         if bank_account_no.strip() and not bank_account_name.strip():
@@ -246,19 +251,22 @@ def _form_edit_employee(df, branches):
         with c1:
             first_name = st.text_input("ชื่อ", value=row.get("first_name",""))
             last_name  = st.text_input("นามสกุล", value=row.get("last_name",""))
-            try: age_v = int(float(row.get("age",18)))
-            except: age_v = 18
-            age = st.number_input("อายุ", min_value=15, max_value=70, step=1, value=age_v)
             try:
                 bd_val = datetime.date.fromisoformat(str(row.get("birthdate","1990-01-01")))
             except:
                 bd_val = datetime.date(1990, 1, 1)
             birthdate = st.date_input(
-                "วันเกิด (date_of_birth)", value=bd_val,
+                "วันเกิด *", value=bd_val,
                 min_value=datetime.date(1980, 1, 1),
                 max_value=datetime.date.today(),
-                help="เลือกปีเกิดได้ตั้งแต่ปี 1980 ถึงวันปัจจุบัน"
+                help="ระบบจะคำนวณอายุจากวันเกิดอัตโนมัติ"
             )
+            # คำนวณอายุอัตโนมัติจากวันเกิด
+            today_e = datetime.date.today()
+            age = today_e.year - birthdate.year - (
+                (today_e.month, today_e.day) < (birthdate.month, birthdate.day)
+            )
+            st.info(f"🎂 อายุ: **{age} ปี** (คำนวณจากวันเกิดอัตโนมัติ)")
             email = st.text_input("Email", value=row.get("email",""))
             phone = st.text_input("เบอร์โทรศัพท์", value=row.get("phone",""))
         with c2:
