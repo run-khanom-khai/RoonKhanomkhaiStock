@@ -255,3 +255,4 @@ st.markdown(
     "ออกแบบและพัฒนาโดย <b>ดร.อภิวรรณ์ ดำแสงสวัสดิ์</b> | "
     "Copyright © 12/06/2026</p>",
     unsafe_allow_html=True)
+# petty cash menu 
