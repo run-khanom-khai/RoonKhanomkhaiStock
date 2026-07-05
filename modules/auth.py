@@ -20,20 +20,22 @@ DEFAULT_DEPTS = {
     "finance":      {"name": "💰 ฝ่ายการเงิน",        "password": "fin1234",      "menus": "finance"},
     "accounting":   {"name": "📒 ฝ่ายบัญชี",          "password": "acc1234",      "menus": "accounting"},
     "dashboard":    {"name": "📈 Dashboard/ผู้บริหาร","password": "dash1234",     "menus": "dashboard"},
+    "petty_cash":   {"name": "💵 เงินสดย่อย",          "password": "petty1234",    "menus": "petty_cash"},
 }
 
 DEPT_MENU_ACCESS = {
     "all":          ["master_data","hr","production","purchase_stock","branch_report",
-                     "audit","finance","accounting","dashboard","export","clear_data"],
+                     "audit","finance","accounting","petty_cash","dashboard","export","clear_data"],
     "master_data":  ["master_data","export"],
     "hr":           ["hr","export"],
     "production":   ["production","purchase_stock","export"],
     "purchase_stock":["purchase_stock","export"],
-    "branch_report":["branch_report","export"],
+    "branch_report":["branch_report","petty_cash","export"],
     "audit":        ["audit","export"],
-    "finance":      ["finance","accounting","export"],
+    "finance":      ["finance","accounting","petty_cash","export"],
     "accounting":   ["accounting","finance","export"],
     "dashboard":    ["dashboard","export"],
+    "petty_cash":   ["petty_cash","export"],
 }
 
 
@@ -181,4 +183,3 @@ def render_manage_passwords():
             from modules.excel_db import update_row
             update_row(SHEET_AUTH, "dept_id", sel_dept, {"pw_hash": _hash(new_pw)})
             st.success(f"✅ เปลี่ยนรหัสผ่าน {dept_opts[sel_dept]} สำเร็จ")
-# updated 
