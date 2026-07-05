@@ -13,7 +13,7 @@ import streamlit as st
 import pandas as pd
 
 from config import (
-    SHEET_BRANCHES,
+    SHEET_BRANCHES, SHEET_EMPLOYEES,
     SHEET_PETTY_CASH_FUNDS,
     SHEET_PETTY_CASH_TRANSACTIONS,
     SHEET_PETTY_CASH_REQUESTS,
@@ -291,74 +291,127 @@ def _form_edit_staff(df: pd.DataFrame, branches: dict):
 
 
 # ══════════════════════════════════════════════════════════════
-# TAB 2 : บันทึกเบิกเงินสดย่อย (Step 3 — ใหม่ทั้งหมด)
+# TAB 2 : บันทึกเบิกเงินสดย่อย
 # ══════════════════════════════════════════════════════════════
 def _render_request_form(role: str):
     st.subheader("📝 บันทึกเบิกเงินสดย่อย")
 
-    # ── โหลด fund (พนักงาน) ──────────────────────────────────
-    fund_df = read_sheet(SHEET_PETTY_CASH_FUNDS)
-    if fund_df.empty:
-        st.warning("⚠️ ยังไม่มีข้อมูลพนักงานสาขา — เพิ่มที่แท็บ 'ข้อมูลพนักงานสาขา' ก่อนครับ")
-        return
-
-    # กรอง branch_staff เห็นเฉพาะสาขาตัวเอง
-    if role == "branch_staff":
-        user_branch = _get_user_branch()
-        if user_branch:
-            fund_df = fund_df[fund_df["branch_name"].astype(str) == user_branch]
-
-    active_funds = fund_df[
-        fund_df.get("is_active", pd.Series(["TRUE"]*len(fund_df)))
-        .astype(str).str.upper() == "TRUE"
-    ]
-    if active_funds.empty:
-        st.info("ไม่พบข้อมูลพนักงานสาขา (active) ของสาขาคุณ"); return
-
     # sub-tab: สร้างใหม่ / ดูรายการของฉัน
     sub1, sub2 = st.tabs(["➕ สร้างรายการเบิกใหม่","📋 รายการของฉัน"])
     with sub1:
-        _form_new_request(active_funds, role)
+        _form_new_request(role)
     with sub2:
         _my_requests(role)
 
 
-def _form_new_request(active_funds: pd.DataFrame, role: str):
-    """Form บันทึกเบิกเงินสดย่อย"""
+def _form_new_request(role: str):
+    """Form บันทึกเบิกเงินสดย่อย — ดึงพนักงานจาก HR"""
 
-    st.markdown("#### ① เลือกพนักงาน")
+    # ── โหลดข้อมูลสาขา ───────────────────────────────────────
+    br_df = read_sheet(SHEET_BRANCHES)
+    if br_df.empty:
+        st.warning("⚠️ ยังไม่มีข้อมูลสาขา — กรุณาเพิ่มสาขาใน Master Data ก่อนครับ")
+        return
 
-    # ── Dropdown เลือกพนักงาน ────────────────────────────────
-    fund_opts = active_funds["fund_id"].tolist()
-    sel_fund  = st.selectbox(
-        "ชื่อพนักงาน *",
-        fund_opts,
-        format_func=lambda x: (
-            f"{active_funds[active_funds['fund_id']==x]['staff_name'].values[0]} "
-            f"— {active_funds[active_funds['fund_id']==x]['branch_name'].values[0]}"
-        ),
-        key="req_fund_sel",
+    branches_dict = {}
+    if not br_df.empty and "branch_id" in br_df.columns:
+        branches_dict = dict(zip(br_df["branch_id"], br_df["branch_name"]))
+
+    # ── ① เลือกสาขาก่อน ──────────────────────────────────────
+    st.markdown("#### ① เลือกสาขา")
+
+    # branch_staff เห็นเฉพาะสาขาตัวเอง
+    if role == "branch_staff":
+        user_branch_name = _get_user_branch()
+        # หา branch_id จาก branch_name
+        matched = br_df[br_df["branch_name"].astype(str) == str(user_branch_name)]
+        if matched.empty:
+            st.error(f"❌ ไม่พบสาขา '{user_branch_name}' ในระบบ")
+            return
+        branch_opts = matched["branch_id"].tolist()
+    else:
+        branch_opts = br_df["branch_id"].tolist()
+
+    sel_branch_id = st.selectbox(
+        "สาขา *",
+        branch_opts,
+        format_func=lambda k: f"{k} – {branches_dict.get(k, k)}",
+        key="req_branch_sel",
     )
+    sel_branch_name = branches_dict.get(sel_branch_id, sel_branch_id)
 
-    # ── ดึงข้อมูลพนักงานอัตโนมัติ ────────────────────────────
-    emp_row = active_funds[active_funds["fund_id"] == sel_fund].iloc[0]
+    # ── ② เลือกพนักงานจาก HR ─────────────────────────────────
+    st.markdown("#### ② เลือกพนักงาน")
 
-    # แสดงข้อมูลพนักงาน (read-only card)
-    with st.container():
+    emp_df = read_sheet(SHEET_EMPLOYEES)
+    branch_emps = pd.DataFrame()
+    if not emp_df.empty:
+        # กรองพนักงานของสาขาที่เลือก + status active
+        mask = emp_df["branch_id"].astype(str) == str(sel_branch_id)
+        if "status" in emp_df.columns:
+            mask = mask & (emp_df["status"].astype(str) == "active")
+        branch_emps = emp_df[mask].copy()
+
+    if branch_emps.empty:
         st.markdown(
-            f"""<div style='background:#E3F2FD;border:1.5px solid #1565C0;
-            border-radius:8px;padding:14px;margin:8px 0;'>
-            <b style='color:#1565C0;'>ข้อมูลพนักงาน (ดึงอัตโนมัติ)</b><br>
-            👤 <b>{emp_row.get('staff_name','')}</b> &nbsp;|&nbsp;
-            🏪 {emp_row.get('branch_name','')} &nbsp;|&nbsp;
-            📞 {emp_row.get('phone','')}<br>
-            🏦 {emp_row.get('bank_name','')} &nbsp;
-            เลขบัญชี: <code>{emp_row.get('bank_account_no','')}</code> &nbsp;
-            ชื่อบัญชี: {emp_row.get('bank_account_name','')}<br>
-            💰 วงเงิน: ฿{float(emp_row.get('fund_limit',0)):,.2f}
-            </div>""",
+            "<div style='background:#FFF3E0;border:2px solid #FF8F00;"
+            "border-radius:8px;padding:14px;color:#E65100;'>"
+            "⚠️ <b>ไม่พบข้อมูลพนักงานของสาขานี้</b><br>"
+            "กรุณาเพิ่มข้อมูลที่เมนู <b>HR &gt; เพิ่มพนักงาน</b> "
+            "ก่อนทำรายการเงินสดย่อย</div>",
             unsafe_allow_html=True,
         )
+        return
+
+    emp_opts = branch_emps["employee_id"].tolist()
+    sel_emp_id = st.selectbox(
+        "ชื่อพนักงาน *",
+        emp_opts,
+        format_func=lambda x: (
+            f"{branch_emps[branch_emps['employee_id']==x]['first_name'].values[0]} "
+            f"{branch_emps[branch_emps['employee_id']==x]['last_name'].values[0]}"
+        ),
+        key="req_emp_sel",
+    )
+    emp_row = branch_emps[branch_emps["employee_id"] == sel_emp_id].iloc[0]
+    emp_name = f"{emp_row.get('first_name','')} {emp_row.get('last_name','')}".strip()
+
+    # ── แสดง Card ข้อมูลพนักงาน (read-only) ─────────────────
+    emp_email      = emp_row.get('email','').strip() or '-'
+    emp_phone      = emp_row.get('phone','').strip() or '-'
+    emp_bank       = emp_row.get('bank_name','').strip() or '-'
+    emp_bank_br    = emp_row.get('bank_branch','').strip() or '-'
+    emp_acc_no     = emp_row.get('bank_account_no','').strip() or '-'
+    emp_acc_name   = emp_row.get('bank_account_name','').strip() or '-'
+    emp_promptpay  = emp_row.get('promptpay_no','').strip()
+    promptpay_line = (
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>📲 PromptPay</td>"
+        f"<td style='color:#000000;padding:4px 8px;'><code style='color:#000000;'>{emp_promptpay}</code></td></tr>"
+    ) if emp_promptpay else ""
+    st.markdown(
+        f"<div style='background:#E3F2FD;border:1.5px solid #1565C0;"
+        f"border-radius:8px;padding:14px;margin:8px 0;color:#000000;'>"
+        f"<b style='color:#1565C0;font-size:1rem;'>ข้อมูลพนักงาน (ดึงจาก HR อัตโนมัติ)</b>"
+        f"<table style='width:100%;margin-top:8px;border-collapse:collapse;'>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;width:140px;'>👤 ชื่อพนักงาน</td>"
+        f"<td style='color:#000000;padding:4px 8px;'><b>{emp_name}</b></td></tr>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>📧 e-mail</td>"
+        f"<td style='color:#000000;padding:4px 8px;'>{emp_email}</td></tr>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>📞 เบอร์โทร</td>"
+        f"<td style='color:#000000;padding:4px 8px;'>{emp_phone}</td></tr>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>🏪 รหัสสาขา</td>"
+        f"<td style='color:#000000;padding:4px 8px;'>{sel_branch_id} – {sel_branch_name}</td></tr>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>🏦 ธนาคาร</td>"
+        f"<td style='color:#000000;padding:4px 8px;'>{emp_bank} สาขา {emp_bank_br}</td></tr>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>💳 เลขบัญชี</td>"
+        f"<td style='color:#000000;padding:4px 8px;'>"
+        f"<code style='color:#000000;background:#f0f4ff;padding:2px 6px;border-radius:4px;'>{emp_acc_no}</code></td></tr>"
+        f"<tr><td style='color:#000000;padding:4px 8px;font-weight:600;'>👤 ชื่อบัญชี</td>"
+        f"<td style='color:#000000;padding:4px 8px;'><b>{emp_acc_name}</b></td></tr>"
+        f"{promptpay_line}"
+        f"</table></div>",
+        unsafe_allow_html=True,
+    )
 
     st.divider()
     st.markdown("#### ② รายละเอียดการเบิก")
@@ -383,55 +436,107 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
         st.info("📎 กรุณาแนบหลักฐานการเดินทาง เช่น ใบเสร็จน้ำมัน, ตั๋วรถ, ใบจองที่พัก")
 
     st.divider()
-    st.markdown("#### ③ ยอดเงินรวม")
-    st.caption("💡 กรุณารวมยอดจากใบเสร็จเองก่อนกรอกในช่องนี้")
-    total_amount = st.number_input(
-        "ยอดเงินรวมทั้งหมด (บาท) *",
-        min_value=0.0, step=10.0, format="%.2f",
-        key="req_total",
-    )
-    if total_amount > 0:
-        st.success(f"💰 ยอดที่จะเบิก: **฿{total_amount:,.2f}**")
+    st.markdown("#### ③ แนบใบเสร็จ / หลักฐาน")
 
-    st.divider()
-    st.markdown("#### ④ แนบใบเสร็จ / หลักฐาน")
-    st.caption("รองรับ JPG, JPEG, PNG, PDF | แนบได้หลายไฟล์ | ต้องแนบอย่างน้อย 1 ไฟล์")
+    # ── Counter แสดงจำนวน ────────────────────────────────────
+    MAX_RECEIPTS = 20
+    st.markdown(
+        f"<div style='background:#E8F5E9;border:1.5px solid #2E7D32;"
+        f"border-radius:6px;padding:8px 14px;margin-bottom:8px;'>"
+        f"📎 แนบใบเสร็จได้สูงสุด <b>{MAX_RECEIPTS} ไฟล์</b> ต่อ 1 รายการ | "
+        f"รองรับ JPG, PNG, PDF | ขนาดสูงสุด <b>10 MB</b> ต่อไฟล์</div>",
+        unsafe_allow_html=True,
+    )
 
     receipt_files = st.file_uploader(
         "แนบใบเสร็จ / หลักฐาน *",
         type=["jpg","jpeg","png","pdf"],
         accept_multiple_files=True,
         key="req_receipts",
-        help="รองรับ JPG, PNG, PDF | ขนาดสูงสุด 10 MB ต่อไฟล์",
+        help=f"สูงสุด {MAX_RECEIPTS} ไฟล์ | JPG, PNG, PDF | ขนาดสูงสุด 10 MB/ไฟล์",
     )
 
-    # Preview + Validate ไฟล์ที่แนบ
+    # ── Counter + Validate ───────────────────────────────────
     if receipt_files:
-        st.markdown(f"**แนบแล้ว {len(receipt_files)} ไฟล์:**")
-        cols = st.columns(min(len(receipt_files), 3))
-        for i, f in enumerate(receipt_files):
-            with cols[i % 3]:
-                # validate
-                if GDRIVE_AVAILABLE:
-                    ok, err = validate_uploaded_file(f, max_mb=10.0)
-                    if not ok:
-                        st.error(f"❌ {f.name}: {err}")
-                        continue
-                # preview
-                if f.type in ["image/jpeg","image/png","image/jpg"]:
-                    st.image(f, caption=f.name, use_container_width=True)
-                elif f.type == "application/pdf":
-                    st.markdown(f"📄 **{f.name}**")
-                else:
-                    st.write(f"📎 {f.name}")
-                # แสดงขนาดไฟล์
-                kb = _get_file_size_kb(f)
-                st.caption(f"ขนาด: {kb:.1f} KB")
+        num_files = len(receipt_files)
+        bar_pct   = min(num_files / MAX_RECEIPTS, 1.0)
+        bar_color = "#2E7D32" if num_files <= MAX_RECEIPTS * 0.7 else                     "#FF8F00" if num_files < MAX_RECEIPTS else "#E53935"
+
+        # Progress bar
+        st.markdown(
+            f"<div style='margin:6px 0;'>"
+            f"<div style='display:flex;justify-content:space-between;margin-bottom:2px;'>"
+            f"<span style='color:{bar_color};font-weight:bold;'>แนบแล้ว {num_files} / {MAX_RECEIPTS} ไฟล์</span>"
+            f"{'<span style=color:#E53935;font-weight:bold;>⚠️ เกินจำนวนสูงสุด!</span>' if num_files > MAX_RECEIPTS else ''}"
+            f"</div>"
+            f"<div style='background:#eee;border-radius:4px;height:8px;'>"
+            f"<div style='background:{bar_color};width:{bar_pct*100:.0f}%;height:8px;border-radius:4px;'></div>"
+            f"</div></div>",
+            unsafe_allow_html=True,
+        )
+
+        if num_files > MAX_RECEIPTS:
+            st.error(f"❌ แนบไฟล์เกินกำหนด — ระบบรับได้สูงสุด {MAX_RECEIPTS} ไฟล์ กรุณาลบบางไฟล์ออก")
+
+        # ── Preview ไฟล์ทีละไฟล์ ─────────────────────────────
+        st.markdown(f"**รายการไฟล์ที่แนบ ({num_files} ไฟล์):**")
+        valid_files = []
+        for i, f in enumerate(receipt_files[:MAX_RECEIPTS]):  # แสดงแค่ MAX_RECEIPTS
+            with st.container():
+                col_num, col_prev, col_info = st.columns([0.5, 3, 4])
+                with col_num:
+                    st.markdown(
+                        f"<div style='background:#1565C0;color:white;border-radius:50%;"
+                        f"width:28px;height:28px;display:flex;align-items:center;"
+                        f"justify-content:center;font-weight:bold;margin-top:8px;'>"
+                        f"{i+1}</div>",
+                        unsafe_allow_html=True,
+                    )
+                with col_prev:
+                    # validate ขนาด
+                    file_ok = True
+                    if GDRIVE_AVAILABLE:
+                        ok, err = validate_uploaded_file(f, max_mb=10.0)
+                        if not ok:
+                            st.error(f"❌ {err}")
+                            file_ok = False
+                    if file_ok:
+                        if f.type in ["image/jpeg","image/png","image/jpg"]:
+                            st.image(f, use_container_width=True)
+                        elif f.type == "application/pdf":
+                            # PDF preview + download button
+                            pdf_bytes = f.read()
+                            f.seek(0)
+                            st.markdown(f"📄 **{f.name}**")
+                            st.download_button(
+                                label="👁️ เปิดดู PDF",
+                                data=pdf_bytes,
+                                file_name=f.name,
+                                mime="application/pdf",
+                                key=f"pdf_view_{i}_{f.name}",
+                            )
+                        else:
+                            st.markdown(f"📎 {f.name}")
+                with col_info:
+                    kb = _get_file_size_kb(f)
+                    ext = f.name.rsplit(".",1)[-1].upper() if "." in f.name else "?"
+                    st.markdown(
+                        f"<small><b>ชื่อไฟล์:</b> {f.name}<br>"
+                        f"<b>ประเภท:</b> {ext} | <b>ขนาด:</b> {kb:.1f} KB</small>",
+                        unsafe_allow_html=True,
+                    )
+                    if file_ok:
+                        valid_files.append(f)
+            st.divider()
+
+        # เก็บ valid_files ไว้ใช้ตอน save
+        receipt_files = valid_files if valid_files else receipt_files
 
     # แนบหลักฐานการเดินทาง (optional)
     if expense_type == "ค่าเดินทาง":
+        st.markdown("**หลักฐานการเดินทาง (เพิ่มเติม)**")
         travel_proof = st.file_uploader(
-            "แนบหลักฐานการเดินทาง (เพิ่มเติม)",
+            "แนบหลักฐานการเดินทาง",
             type=["jpg","jpeg","png","pdf"],
             accept_multiple_files=False,
             key="req_travel",
@@ -439,6 +544,55 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
         )
     else:
         travel_proof = None
+
+    # ── ⑤ ยอดเงินรวม (พนักงานรวมยอดเอง) ─────────────────────
+    st.divider()
+    st.markdown(
+        "<h4 style='color:#1565C0;'>⑤ ยอดเงินรวมทั้งหมด (บาท)</h4>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='background:#FFF8E1;border:1.5px solid #FF8F00;"
+        "border-radius:6px;padding:10px 14px;margin-bottom:10px;'>"
+        "💡 <b>กรุณารวมยอดจากใบเสร็จทุกใบให้ถูกต้องก่อนกดบันทึก</b><br>"
+        "<small style='color:#555;'>• ระบบไม่ได้อ่านยอดจากใบเสร็จอัตโนมัติ</small><br>"
+        "<small style='color:#555;'>• พนักงานต้องรวมยอดเองจากใบเสร็จทุกใบ</small><br>"
+        "<small style='color:#E53935;'>• ยอดเงินต้องมากกว่า 0 บาท และห้ามติดลบ</small>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    col_amt, col_info = st.columns([2, 1])
+    with col_amt:
+        total_amount = st.number_input(
+            "ยอดเงินรวมทั้งหมด (บาท) *",
+            min_value=0.0,
+            step=10.0,
+            format="%.2f",
+            key="req_total",
+            help="รวมยอดจากใบเสร็จทุกใบ",
+        )
+    with col_info:
+        st.write("")
+        st.write("")
+        if total_amount > 0:
+            st.markdown(
+                f"<div style='background:#E8F5E9;border:2px solid #2E7D32;"
+                f"border-radius:8px;padding:12px;text-align:center;'>"
+                f"<div style='color:#2E7D32;font-size:0.85rem;'>💰 ยอดที่จะเบิก</div>"
+                f"<div style='color:#1B5E20;font-size:1.4rem;font-weight:800;'>"
+                f"฿{total_amount:,.2f}</div><div style='color:#888;font-size:0.75rem;'>บาท</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        elif total_amount == 0:
+            st.markdown(
+                "<div style='background:#FFEBEE;border:2px solid #E53935;"
+                "border-radius:8px;padding:12px;text-align:center;'>"
+                "<span style='color:#E53935;font-weight:bold;'>⚠️ ยอดต้องมากกว่า 0</span>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
     st.divider()
 
@@ -460,14 +614,21 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
         errors = []
         if not expense_type:                   errors.append("กรุณาเลือกประเภทการเบิก")
         if not expense_detail.strip():         errors.append("กรุณากรอกรายละเอียดค่าใช้จ่าย")
-        if total_amount <= 0:                  errors.append("ยอดเงินต้องมากกว่า 0 บาท")
+        if total_amount is None or total_amount == 0:
+            errors.append("กรุณากรอกยอดเงินรวม — ยอดต้องมากกว่า 0 บาท")
+        elif total_amount < 0:
+            errors.append("ยอดเงินรวมต้องไม่ติดลบ — กรุณากรอกยอดที่ถูกต้อง")
         if target_status == "waiting_transfer" and not receipt_files:
             errors.append("กรุณาแนบใบเสร็จ / หลักฐานอย่างน้อย 1 ไฟล์")
+        # ตรวจจำนวนไฟล์สูงสุด
+        total_attach = len(receipt_files or []) + (1 if travel_proof else 0)
+        if total_attach > MAX_RECEIPTS:
+            errors.append(f"แนบไฟล์เกินกำหนด ({total_attach}/{MAX_RECEIPTS}) — กรุณาลดจำนวนไฟล์")
 
         # branch_staff ห้ามสร้างรายการให้สาขาอื่น
         if role == "branch_staff":
             user_branch = _get_user_branch()
-            emp_branch  = str(emp_row.get("branch_name",""))
+            emp_branch  = sel_branch_name
             if user_branch and emp_branch != user_branch:
                 errors.append("คุณไม่มีสิทธิ์บันทึกรายการให้สาขาอื่น")
 
@@ -475,7 +636,7 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
             for e in errors: st.error(e)
             break
 
-        # ── บันทึก petty_cash_requests ───────────────────────
+        # ── บันทึก petty_cash_requests (snapshot ณ วันที่ทำรายการ) ──
         req_df     = read_sheet(SHEET_PETTY_CASH_REQUESTS)
         request_id = next_id(req_df, "request_id", "PCR")
         request_no = _gen_request_no()
@@ -488,17 +649,17 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
         append_row(SHEET_PETTY_CASH_REQUESTS, {
             "request_id":        request_id,
             "request_no":        request_no,
-            "employee_id":       sel_fund,
-            "employee_name":     emp_row.get("staff_name",""),
-            "email":             "",
+            "employee_id":       sel_emp_id,
+            "employee_name":     emp_name,
+            "email":             emp_row.get("email",""),
             "phone":             emp_row.get("phone",""),
-            "branch_id":         emp_row.get("branch_id",""),
-            "branch_code":       emp_row.get("branch_id",""),
-            "branch_name":       emp_row.get("branch_name",""),
+            "branch_id":         sel_branch_id,
+            "branch_code":       sel_branch_id,
+            "branch_name":       sel_branch_name,
             "bank_name":         emp_row.get("bank_name",""),
             "bank_account_no":   emp_row.get("bank_account_no",""),
             "bank_account_name": emp_row.get("bank_account_name",""),
-            "promptpay_no":      "",
+            "promptpay_no":      emp_row.get("promptpay_no",""),
             "request_date":      str(request_date),
             "expense_type":      expense_type,
             "expense_detail":    expense_detail.strip(),
@@ -521,8 +682,14 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
             all_files.append(travel_proof)
 
         upload_errors = []
-        for uploaded_f in all_files:
+        ts_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        for idx, uploaded_f in enumerate(all_files):
             ftype = "travel_proof" if uploaded_f == travel_proof else "receipt"
+
+            # ── ตั้งชื่อไฟล์ใหม่กันชนซ้ำ ──────────────────────
+            ext      = uploaded_f.name.rsplit(".",1)[-1] if "." in uploaded_f.name else "bin"
+            new_name = f"{request_id}_{ftype}_{idx+1:02d}_{ts_str}.{ext}"
 
             drive_file_id = ""
             drive_url     = ""
@@ -532,6 +699,8 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
             # ── อัปโหลดขึ้น Google Drive ─────────────────────
             if GDRIVE_AVAILABLE:
                 try:
+                    # rename ชั่วคราวสำหรับ upload
+                    uploaded_f.name = new_name
                     result = upload_file_to_drive(
                         uploaded_f,
                         request_id=request_id,
@@ -540,11 +709,11 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
                     drive_url     = result["url"]
                     mime_type     = result["mime_type"]
                 except Exception as upload_err:
-                    upload_errors.append(f"{uploaded_f.name}: {upload_err}")
+                    upload_errors.append(f"ไฟล์ที่ {idx+1}: {upload_err}")
                     drive_file_id = "UPLOAD_FAILED"
                     drive_url     = ""
             else:
-                upload_errors.append(f"Google Drive ไม่พร้อมใช้งาน")
+                upload_errors.append("Google Drive ไม่พร้อมใช้งาน")
 
             # ── บันทึก metadata ใน Google Sheets ────────────
             att_df = read_sheet(SHEET_PETTY_CASH_ATTACHMENTS)
@@ -553,7 +722,7 @@ def _form_new_request(active_funds: pd.DataFrame, role: str):
                 "attachment_id": att_id,
                 "request_id":    request_id,
                 "file_type":     ftype,
-                "file_name":     uploaded_f.name,
+                "file_name":     new_name,
                 "drive_file_id": drive_file_id,
                 "drive_url":     drive_url,
                 "mime_type":     mime_type,
@@ -611,7 +780,7 @@ def _my_requests(role: str):
 
     # แสดงตาราง
     show_cols = ["request_no","request_date","employee_name","branch_name",
-                 "expense_type","total_amount","status","receipt_files"]
+                 "expense_detail","total_amount","status","receipt_files"]
     display   = req_df[[c for c in show_cols if c in req_df.columns]].copy()
     if "status" in display.columns:
         display["status"] = display["status"].map(
@@ -646,10 +815,19 @@ def _my_requests(role: str):
             st.error("❌ คุณไม่มีสิทธิ์แก้ไขรายการของสาขาอื่น")
             return
 
-    # ตรวจ status paid — lock
+    # ตรวจ status paid — lock (ยกเว้น admin)
     if str(row.get("status","")) == "paid":
-        st.warning("⚠️ รายการนี้ paid แล้ว ไม่สามารถแก้ไขได้")
-        return
+        if role != "admin":
+            st.markdown(
+                "<div style='background:#FFEBEE;border:2px solid #E53935;"
+                "border-radius:8px;padding:12px;'>"
+                "🔒 <b style='color:#B71C1C;'>รายการนี้ paid แล้ว — ไม่สามารถแก้ไขหรือลบไฟล์แนบได้</b><br>"
+                "<small style='color:#888;'>ติดต่อ Admin เพื่อแก้ไขครับ</small></div>",
+                unsafe_allow_html=True,
+            )
+            return
+        else:
+            st.warning("⚠️ [Admin Mode] รายการนี้ paid แล้ว — แก้ไขได้เนื่องจากสิทธิ์ Admin")
 
     col_edit, col_del = st.columns(2)
     with col_edit:
@@ -659,12 +837,26 @@ def _my_requests(role: str):
                 except: td = 0.0
                 new_detail = st.text_area("รายละเอียด",
                                            value=row.get("expense_detail",""), height=80)
-                new_amount = st.number_input("ยอดเงินรวม", min_value=0.0,
-                                              step=10.0, value=td)
+                # lock total_amount ถ้า paid (ยกเว้น admin)
+                is_paid = str(row.get("status","")) == "paid"
+                if is_paid and role != "admin":
+                    st.markdown(
+                        f"<div style='background:#F5F5F5;border:1px solid #ccc;"
+                        f"border-radius:6px;padding:10px;'>"
+                        f"💰 ยอดเงินรวม: <b>฿{td:,.2f}</b> บาท<br>"
+                        f"<small style='color:#E53935;'>🔒 ไม่สามารถแก้ไขได้ (status = paid)</small>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    new_amount = td  # ใช้ค่าเดิม
+                else:
+                    new_amount = st.number_input("ยอดเงินรวม (บาท)",
+                                                  min_value=0.0, step=10.0, value=td,
+                                                  help="กรุณารวมยอดจากใบเสร็จทุกใบให้ถูกต้อง")
                 new_note   = st.text_input("หมายเหตุ", value=row.get("note",""))
                 save_edit  = st.form_submit_button("💾 บันทึก", type="primary")
             if save_edit:
-                if new_amount <= 0: st.error("ยอดเงินต้องมากกว่า 0"); return
+                if new_amount <= 0: st.error("ยอดเงินต้องมากกว่า 0 บาท"); return
                 update_row(SHEET_PETTY_CASH_REQUESTS, "request_id", sel_req, {
                     "expense_detail": new_detail,
                     "total_amount":   new_amount,
@@ -732,10 +924,16 @@ def _render_pending(role: str):
 
     if not pending_new.empty:
         st.markdown("#### 📋 รายการใหม่ (Petty Cash Requests)")
+        # Format total_amount ก่อนแสดง
         show = pending_new[[c for c in [
             "request_no","request_date","employee_name","branch_name",
             "expense_type","expense_detail","total_amount","receipt_files","status"
-        ] if c in pending_new.columns]]
+        ] if c in pending_new.columns]].copy()
+        if "total_amount" in show.columns:
+            show["total_amount"] = pd.to_numeric(
+                show["total_amount"], errors="coerce"
+            ).fillna(0).apply(lambda x: f"฿{x:,.2f}")
+            show = show.rename(columns={"total_amount": "ยอดเงินรวม (฿)"})
         st.dataframe(show, use_container_width=True)
 
         if role in ["admin","finance_hq"]:
@@ -869,7 +1067,7 @@ def _render_history(role: str):
     paid_sort = paid.sort_values("request_date", ascending=False) if "request_date" in paid.columns else paid
     st.dataframe(paid_sort[[c for c in [
         "request_no","request_date","employee_name","branch_name",
-        "expense_type","total_amount","status","receipt_files"
+        "expense_detail","total_amount","status","receipt_files"
     ] if c in paid_sort.columns]], use_container_width=True)
 
     buf = io.BytesIO()
@@ -918,11 +1116,12 @@ def _render_report(role: str):
     ).reset_index()
     st.dataframe(br_sum, use_container_width=True)
 
-    st.markdown("#### สรุปแยกตามประเภทค่าใช้จ่าย")
-    tp_sum = req_df.groupby("expense_type").agg(
+    st.markdown("#### สรุปแยกตามรายละเอียดค่าใช้จ่าย")
+    tp_sum = req_df.groupby("expense_detail").agg(
         จำนวน=("request_id","count"),
         ยอดรวม=("total_amount","sum"),
     ).reset_index().sort_values("ยอดรวม", ascending=False)
+    tp_sum = tp_sum.rename(columns={"expense_detail": "รายละเอียดค่าใช้จ่าย"})
     st.dataframe(tp_sum, use_container_width=True)
 
     buf = io.BytesIO()

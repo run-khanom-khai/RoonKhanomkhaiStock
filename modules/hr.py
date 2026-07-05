@@ -17,6 +17,8 @@ HR_SCHEMAS = {
     SHEET_EMPLOYEES: [
         "employee_id","first_name","last_name","age","birthdate","education",
         "position","salary","branch_id","start_date","resign_date","status",
+        "email","phone",
+        "bank_name","bank_branch","bank_account_no","bank_account_name","promptpay_no",
     ],
     SHEET_PAYROLL_PERIODS: [
         "payroll_period_id","month","year","period_no",
@@ -100,43 +102,133 @@ def _render_employees():
 
 
 def _form_add_employee(branches):
+    # ── auto-fill helper ─────────────────────────────────────
+    if "add_fname" not in st.session_state:
+        st.session_state["add_fname"] = ""
+    if "add_lname" not in st.session_state:
+        st.session_state["add_lname"] = ""
+
     with st.form("form_add_emp"):
-        st.markdown("#### เพิ่มพนักงานใหม่")
+        st.markdown("#### ➕ เพิ่มพนักงานใหม่")
+        st.caption("* = จำเป็นต้องกรอก")
+
+        # ── ส่วนที่ 1: ข้อมูลส่วนตัว ─────────────────────────
+        st.markdown("**👤 ข้อมูลส่วนตัว**")
         c1, c2, c3 = st.columns(3)
         with c1:
-            first_name  = st.text_input("ชื่อ *")
-            last_name   = st.text_input("นามสกุล *")
-            age         = st.number_input("อายุ", min_value=15, max_value=70, step=1)
-            birthdate   = st.date_input("วันเกิด")
+            first_name = st.text_input("ชื่อ *", key="add_fn")
+            last_name  = st.text_input("นามสกุล *", key="add_ln")
+            age        = st.number_input("อายุ", min_value=15, max_value=70, step=1)
+            birthdate  = st.date_input(
+                "วันเกิด (date_of_birth)",
+                min_value=datetime.date(1980, 1, 1),
+                max_value=datetime.date.today(),
+                value=datetime.date(1990, 1, 1),
+                help="เลือกปีเกิดได้ตั้งแต่ปี 1980 ถึงวันปัจจุบัน"
+            )
         with c2:
-            education   = st.text_input("การศึกษา")
-            position    = st.selectbox("ตำแหน่ง", POSITIONS)
-            salary      = st.number_input("เงินเดือน / ค่าแรงรายวัน (บาท)",
-                                          min_value=0.0, step=50.0)
+            email = st.text_input("e-mail", placeholder="example@email.com")
+            phone = st.text_input("เบอร์โทรศัพท์ *",
+                                   placeholder="0812345678",
+                                   help="กรอกตัวเลขเท่านั้น ไม่ต้องใส่เครื่องหมาย")
+            education = st.text_input("การศึกษา")
         with c3:
+            position   = st.selectbox("ตำแหน่ง", POSITIONS)
+            salary     = st.number_input("เงินเดือน / ค่าแรงรายวัน (บาท)",
+                                          min_value=0.0, step=50.0)
             branch_opts = list(branches.keys()) if branches else []
-            branch_id   = st.selectbox("สาขา",
-                                        [""] + branch_opts,
-                                        format_func=lambda k: branches.get(k, "– ไม่ระบุ –") if k else "– ไม่ระบุ –")
-            start_date  = st.date_input("วันเริ่มงาน")
-            status      = st.selectbox("สถานะ", EMPLOYEE_STATUSES)
+            branch_id   = st.selectbox(
+                "สาขา *", [""] + branch_opts,
+                format_func=lambda k: f"{k} – {branches.get(k,'')}" if k else "– กรุณาเลือกสาขา –"
+            )
+            start_date = st.date_input("วันเริ่มงาน")
+            status     = st.selectbox("สถานะ", EMPLOYEE_STATUSES)
 
-        saved = st.form_submit_button("💾 บันทึก", type="primary")
+        st.divider()
+
+        # ── ส่วนที่ 2: ข้อมูลธนาคาร ──────────────────────────
+        st.markdown("**🏦 ข้อมูลธนาคาร**")
+        st.caption("ต้องมีอย่างน้อย เลขที่บัญชี หรือ PromptPay")
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            bank_name   = st.text_input("ชื่อธนาคาร")
+            bank_branch = st.text_input("สาขาธนาคาร")
+        with b2:
+            bank_account_no   = st.text_input("เลขที่บัญชี")
+            bank_account_name = st.text_input(
+                "ชื่อบัญชีธนาคาร *",
+                placeholder="ใส่ชื่อ-นามสกุล เจ้าของบัญชี",
+                help="โดยทั่วไปตรงกับชื่อพนักงาน"
+            )
+        with b3:
+            promptpay_no = st.text_input(
+                "หมายเลข PromptPay (ถ้ามี)",
+                placeholder="เบอร์โทร หรือ เลขบัตรประชาชน"
+            )
+
+        saved = st.form_submit_button("💾 บันทึกพนักงาน", type="primary",
+                                       use_container_width=True)
+
     if saved:
-        if not first_name.strip() or not last_name.strip():
-            st.error("กรุณากรอกชื่อและนามสกุล")
+        # ── Validation ────────────────────────────────────────
+        errors = []
+        fn = first_name.strip()
+        ln = last_name.strip()
+
+        if not fn or not ln:
+            errors.append("กรุณากรอกชื่อและนามสกุล")
+        if not branch_id:
+            errors.append("กรุณาเลือกสาขา")
+        if not phone.strip():
+            errors.append("กรุณากรอกเบอร์โทรศัพท์")
+        elif not re.match(r"^[0-9+\-\s]{8,15}$", phone.strip()):
+            errors.append("เบอร์โทรศัพท์ต้องเป็นตัวเลข 8-15 หลัก")
+        if email.strip() and not re.match(r"^[\w\.\-]+@[\w\.\-]+\.\w{2,}$", email.strip()):
+            errors.append("รูปแบบ e-mail ไม่ถูกต้อง เช่น example@email.com")
+        if birthdate < datetime.date(1980, 1, 1):
+            errors.append("วันเกิดต้องไม่ก่อนปี 1980")
+        if birthdate > datetime.date.today():
+            errors.append("วันเกิดต้องไม่เกินวันที่ปัจจุบัน")
+        if not bank_account_no.strip() and not promptpay_no.strip():
+            errors.append("ต้องมีอย่างน้อย เลขที่บัญชี หรือ หมายเลข PromptPay")
+        if bank_account_no.strip() and not bank_account_name.strip():
+            errors.append("กรุณากรอกชื่อบัญชีธนาคาร (bank_account_name)")
+
+        if errors:
+            for e in errors:
+                st.error(f"❌ {e}")
             return
-        df = read_sheet(SHEET_EMPLOYEES)
+
+        # ── auto-fill bank_account_name ถ้าว่าง ──────────────
+        final_acc_name = bank_account_name.strip() or f"{fn} {ln}"
+
+        df     = read_sheet(SHEET_EMPLOYEES)
         emp_id = next_id(df, "employee_id", "EMP")
         append_row(SHEET_EMPLOYEES, {
-            "employee_id": emp_id, "first_name": first_name.strip(),
-            "last_name": last_name.strip(), "age": age,
-            "birthdate": str(birthdate), "education": education,
-            "position": position, "salary": salary,
-            "branch_id": branch_id, "start_date": str(start_date),
-            "resign_date": "", "status": status,
+            "employee_id":      emp_id,
+            "first_name":       fn,
+            "last_name":        ln,
+            "age":              age,
+            "birthdate":        str(birthdate),
+            "education":        education.strip(),
+            "position":         position,
+            "salary":           salary,
+            "branch_id":        branch_id,
+            "start_date":       str(start_date),
+            "resign_date":      "",
+            "status":           status,
+            "email":            email.strip(),
+            "phone":            phone.strip(),
+            "bank_name":        bank_name.strip(),
+            "bank_branch":      bank_branch.strip(),
+            "bank_account_no":  bank_account_no.strip(),
+            "bank_account_name": final_acc_name,
+            "promptpay_no":     promptpay_no.strip(),
         })
-        st.success(f"✅ เพิ่มพนักงาน {first_name} {last_name} สำเร็จ (ID: {emp_id})")
+        st.success(
+            f"✅ เพิ่มพนักงาน **{fn} {ln}** สำเร็จ (ID: {emp_id}) | "
+            f"สาขา: {branches.get(branch_id, branch_id)}"
+        )
         st.rerun()
 
 
@@ -157,6 +249,18 @@ def _form_edit_employee(df, branches):
             try: age_v = int(float(row.get("age",18)))
             except: age_v = 18
             age = st.number_input("อายุ", min_value=15, max_value=70, step=1, value=age_v)
+            try:
+                bd_val = datetime.date.fromisoformat(str(row.get("birthdate","1990-01-01")))
+            except:
+                bd_val = datetime.date(1990, 1, 1)
+            birthdate = st.date_input(
+                "วันเกิด (date_of_birth)", value=bd_val,
+                min_value=datetime.date(1980, 1, 1),
+                max_value=datetime.date.today(),
+                help="เลือกปีเกิดได้ตั้งแต่ปี 1980 ถึงวันปัจจุบัน"
+            )
+            email = st.text_input("Email", value=row.get("email",""))
+            phone = st.text_input("เบอร์โทรศัพท์", value=row.get("phone",""))
         with c2:
             education = st.text_input("การศึกษา", value=row.get("education",""))
             pos_idx   = POSITIONS.index(row.get("position",POSITIONS[0])) if row.get("position") in POSITIONS else 0
@@ -164,13 +268,19 @@ def _form_edit_employee(df, branches):
             try: sal_v = float(row.get("salary",0))
             except: sal_v = 0.0
             salary = st.number_input("เงินเดือน", min_value=0.0, step=50.0, value=sal_v)
+            st.markdown("**ข้อมูลธนาคาร**")
+            bank_name   = st.text_input("ชื่อธนาคาร",   value=row.get("bank_name",""))
+            bank_branch = st.text_input("สาขาธนาคาร", value=row.get("bank_branch",""))
         with c3:
+            bank_account_no   = st.text_input("เลขที่บัญชี",     value=row.get("bank_account_no",""))
+            bank_account_name = st.text_input("ชื่อบัญชีธนาคาร", value=row.get("bank_account_name",""))
+            promptpay_no      = st.text_input("PromptPay",        value=row.get("promptpay_no",""))
             branch_opts = list(branches.keys()) if branches else []
             all_br = [""] + branch_opts
             cur_br = row.get("branch_id","")
             br_idx = all_br.index(cur_br) if cur_br in all_br else 0
             branch_id  = st.selectbox("สาขา", all_br, index=br_idx,
-                                       format_func=lambda k: branches.get(k,"– ไม่ระบุ –") if k else "– ไม่ระบุ –")
+                                       format_func=lambda k: f"{k} – {branches.get(k,'')}" if k else "– ไม่ระบุ –")
             st_opts = EMPLOYEE_STATUSES
             st_idx  = st_opts.index(row.get("status","active")) if row.get("status") in st_opts else 0
             status  = st.selectbox("สถานะ", st_opts, index=st_idx)
@@ -183,8 +293,14 @@ def _form_edit_employee(df, branches):
     if save:
         update_row(SHEET_EMPLOYEES, "employee_id", sel, {
             "first_name": first_name, "last_name": last_name, "age": age,
-            "education": education, "position": position, "salary": salary,
+            "birthdate": str(birthdate), "education": education,
+            "position": position, "salary": salary,
             "branch_id": branch_id, "status": status, "resign_date": resign_date,
+            "email": email, "phone": phone,
+            "bank_name": bank_name, "bank_branch": bank_branch,
+            "bank_account_no": bank_account_no,
+            "bank_account_name": bank_account_name,
+            "promptpay_no": promptpay_no,
         })
         st.success("✅ แก้ไขสำเร็จ"); st.rerun()
     if delete:
