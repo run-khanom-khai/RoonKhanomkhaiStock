@@ -362,8 +362,17 @@ def _form_new_request(role: str):
     emp_df = read_sheet(SHEET_EMPLOYEES)
     branch_emps = pd.DataFrame()
     if not emp_df.empty:
-        # กรองพนักงานด้วย branch_id ตรงๆ (field เดียวกับ HR)
-        mask = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()
+        # กรองพนักงานด้วย branch_id หรือ branch_name
+        # HR เก็บ branch_id, petty_cash_funds เก็บ branch_name
+        mask_id   = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_id).strip()
+        mask_name = emp_df["branch_id"].astype(str).str.strip() == str(sel_branch_name).strip()
+
+        # กรณีพิเศษ: ถ้า HR เก็บชื่อสาขาใน branch_id field
+        mask_name2 = pd.Series([False] * len(emp_df))
+        if "branch_name" in emp_df.columns:
+            mask_name2 = emp_df["branch_name"].astype(str).str.strip() == str(sel_branch_name).strip()
+
+        mask = mask_id | mask_name | mask_name2
 
         # กรอง status — ไม่แสดงเฉพาะคนที่ลาออกแล้ว
         if "status" in emp_df.columns:
@@ -381,7 +390,8 @@ def _form_new_request(role: str):
             "⚠️ <b>ไม่พบข้อมูลพนักงานของสาขานี้</b><br>"
             "กรุณาเพิ่มข้อมูลที่เมนู <b>HR &gt; เพิ่มพนักงาน</b> "
             "ก่อนทำรายการเงินสดย่อย<br>"
-            f"<small style='color:#888;'>รหัสสาขาที่เลือก: <b>{sel_branch_id}</b></small>"
+            f"<small style='color:#888;'>รหัสสาขา: <b>{sel_branch_id}</b> | "
+            f"ชื่อสาขา: <b>{sel_branch_name}</b></small>"
             "</div>",
             unsafe_allow_html=True,
         )
