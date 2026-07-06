@@ -1346,3 +1346,4 @@ def _render_report(role: str):
                        file_name=f"petty_cash_report_{datetime.date.today()}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        type="primary")
+  
