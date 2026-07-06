@@ -1171,42 +1171,51 @@ def _approve_transfer(pending_df: pd.DataFrame):
                 drive_id   = a.get("drive_file_id","")
                 file_size  = a.get("file_size_kb","")
                 with cols[i % 3]:
-                    b64_data   = a.get("file_data_b64","")
-                    storage    = a.get("storage_type","")
+                    b64_data = a.get("file_data_b64","")
+                    storage  = a.get("storage_type","")
+                    att_id   = a.get("attachment_id","")
+                    ext      = fname.rsplit(".",1)[-1].upper() if "." in fname else "FILE"
 
-                    if drive_id and drive_url and not drive_id.startswith("b64_") and drive_id != "UPLOAD_FAILED":
-                        # เก็บใน Google Drive
-                        if fname.lower().endswith((".jpg",".jpeg",".png")):
-                            thumb_url = get_thumbnail_url(drive_id) if GDRIVE_AVAILABLE else ""
-                            if thumb_url:
-                                st.image(thumb_url, caption=fname, use_container_width=True)
-                            else:
-                                st.markdown(f"🖼️ [{fname}]({drive_url})")
-                        else:
-                            st.markdown(f"📄 [{fname}]({drive_url})")
-                        st.markdown(f"[🔗 เปิดไฟล์]({drive_url})")
-                        if file_size:
-                            st.caption(f"ขนาด: {file_size} KB")
+                    # ── กล่องไฟล์ ───────────────────────────────
+                    icon = "🖼️" if ext in ["JPG","JPEG","PNG"] else "📄"
+                    st.markdown(
+                        f"<div style='background:#F5F5F5;border:1px solid #ddd;"
+                        f"border-radius:8px;padding:10px;text-align:center;"
+                        f"color:#000000;'>"
+                        f"<div style='font-size:2rem;'>{icon}</div>"
+                        f"<div style='font-size:0.75rem;color:#333;word-break:break-all;'>{fname}</div>"
+                        f"{'<div style=font-size:0.7rem;color:#888;>'+str(file_size)+' KB</div>' if file_size else ''}"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
 
-                    elif b64_data and storage == "base64":
-                        # เก็บแบบ base64 ใน Sheets
+                    # ── ปุ่ม Download ───────────────────────────
+                    if b64_data and storage == "base64":
                         import base64 as b64mod
                         try:
-                            raw = b64mod.b64decode(b64_data)
-                            if fname.lower().endswith((".jpg",".jpeg",".png")):
-                                st.image(raw, caption=fname, use_container_width=True)
+                            raw      = b64mod.b64decode(b64_data)
+                            ext_mime = "image/jpeg" if ext in ["JPG","JPEG"] else                                        "image/png" if ext == "PNG" else "application/pdf"
                             st.download_button(
-                                f"⬇️ ดาวน์โหลด",
+                                label=f"⬇️ ดาวน์โหลด",
                                 data=raw,
                                 file_name=fname,
-                                key=f"dl_{a.get('attachment_id','')}",
+                                mime=ext_mime,
+                                key=f"dl_{att_id}_{i}",
+                                use_container_width=True,
                             )
-                            if file_size:
-                                st.caption(f"ขนาด: {file_size} KB")
                         except Exception:
-                            st.error(f"❌ ไม่สามารถแสดงไฟล์ {fname}")
+                            st.error(f"❌ ไฟล์เสียหาย")
+                    elif drive_url:
+                        st.markdown(
+                            f"<a href='{drive_url}' target='_blank' style='"
+                            f"display:block;text-align:center;background:#1976D2;"
+                            f"color:white;padding:6px;border-radius:6px;"
+                            f"text-decoration:none;font-size:0.85rem;'>"
+                            f"⬇️ ดาวน์โหลด</a>",
+                            unsafe_allow_html=True,
+                        )
                     else:
-                        st.error(f"❌ {fname} — อัปโหลดไม่สำเร็จ")
+                        st.caption("⚠️ ไม่มีไฟล์")
 
     with st.form(f"form_approve_{sel}"):
         c1, c2 = st.columns(2)
