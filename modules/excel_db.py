@@ -9,8 +9,25 @@ import os
 import pandas as pd
 
 # ── ตรวจว่าควรใช้ Google Sheets หรือไม่ ───────────────────────
+def _use_supabase() -> bool:
+    """ตรวจว่ามี supabase secrets หรือไม่"""
+    try:
+        import streamlit as st
+        if "supabase" in st.secrets:
+            return True
+    except Exception:
+        pass
+    # ถ้ามีไฟล์ supabase_db.py และมี URL
+    try:
+        import supabase_db
+        return True
+    except Exception:
+        return False
+
 def _use_gsheets() -> bool:
-    """ถ้ามี gcp_service_account ใน secrets → ใช้ Google Sheets เสมอ"""
+    """ถ้ามี gcp_service_account ใน secrets → ใช้ Google Sheets"""
+    if _use_supabase():
+        return False  # Supabase มีความสำคัญกว่า
     if os.environ.get("USE_GSHEETS", "").lower() == "true":
         return True
     try:
@@ -125,6 +142,8 @@ def _local_backend():
 
 # ── PUBLIC API (เรียกใช้จากทุก module) ────────────────────────
 def init_workbook():
+    if _use_supabase():
+        return  # Supabase ไม่ต้อง init
     if _use_gsheets():
         try:
             import gsheets_db as gs
@@ -140,12 +159,18 @@ def init_workbook():
             pass
 
 def read_sheet(sheet_name: str) -> pd.DataFrame:
+    if _use_supabase():
+        import supabase_db as sb
+        return sb.read_sheet(sheet_name)
     if _use_gsheets():
         import gsheets_db as gs
         return gs.read_sheet(sheet_name)
     return _local.read_sheet(sheet_name)
 
 def write_sheet(sheet_name: str, df: pd.DataFrame):
+    if _use_supabase():
+        import supabase_db as sb
+        return sb.write_sheet(sheet_name, df)
     if _use_gsheets():
         import gsheets_db as gs
         gs.write_sheet(sheet_name, df)
@@ -153,6 +178,9 @@ def write_sheet(sheet_name: str, df: pd.DataFrame):
         _local.write_sheet(sheet_name, df)
 
 def append_row(sheet_name: str, row_dict: dict):
+    if _use_supabase():
+        import supabase_db as sb
+        return sb.append_row(sheet_name, row_dict)
     if _use_gsheets():
         import gsheets_db as gs
         gs.append_row(sheet_name, row_dict)
@@ -160,6 +188,9 @@ def append_row(sheet_name: str, row_dict: dict):
         _local.append_row(sheet_name, row_dict)
 
 def update_row(sheet_name: str, id_col: str, id_value: str, updated_dict: dict):
+    if _use_supabase():
+        import supabase_db as sb
+        return sb.update_row(sheet_name, id_col, id_value, updated_dict)
     if _use_gsheets():
         import gsheets_db as gs
         gs.update_row(sheet_name, id_col, id_value, updated_dict)
@@ -167,6 +198,9 @@ def update_row(sheet_name: str, id_col: str, id_value: str, updated_dict: dict):
         _local.update_row(sheet_name, id_col, id_value, updated_dict)
 
 def delete_row(sheet_name: str, id_col: str, id_value: str):
+    if _use_supabase():
+        import supabase_db as sb
+        return sb.delete_row(sheet_name, id_col, id_value)
     if _use_gsheets():
         import gsheets_db as gs
         gs.delete_row(sheet_name, id_col, id_value)
