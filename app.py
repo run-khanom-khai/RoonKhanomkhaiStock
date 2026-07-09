@@ -40,16 +40,61 @@ except Exception as e:
         st.stop()
 
 # ── Session init ─────────────────────────────────────────────
+# ── SESSION STATE INIT ──────────────────────────────────────
+# ใช้ query params เป็น fallback กัน session หลุด
+def _restore_session():
+    """กู้คืน session จาก query params ถ้า session หลุด"""
+    if st.session_state.get("logged_in"):
+        return  # session ยังอยู่ ไม่ต้องทำอะไร
+
+    # ลอง restore จาก query params
+    try:
+        params   = st.query_params
+        dept_id  = params.get("d", "")
+        dept_tok = params.get("t", "")
+        if dept_id and dept_tok:
+            import hashlib
+            expected = hashlib.md5(
+                f"{dept_id}:roon2026".encode()
+            ).hexdigest()[:8]
+            if dept_tok == expected:
+                from modules.auth import get_dept_info, get_allowed_menus
+                try:
+                    info = get_dept_info(dept_id)
+                    if info:
+                        st.session_state["logged_in"]     = True
+                        st.session_state["dept_id"]       = dept_id
+                        st.session_state["dept_name"]     = info.get("name", dept_id)
+                        st.session_state["allowed_menus"] = get_allowed_menus(dept_id)
+                        return
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"]     = False
     st.session_state["dept_id"]       = ""
     st.session_state["dept_name"]     = ""
     st.session_state["allowed_menus"] = []
 
+_restore_session()
+
 # ── LOGIN CHECK ──────────────────────────────────────────────
 if not st.session_state["logged_in"]:
     render_login(LOGO_B64)
     st.stop()
+
+# ── บันทึก session ใน query params ──────────────────────────
+try:
+    import hashlib
+    dept_id = st.session_state.get("dept_id","")
+    if dept_id:
+        tok = hashlib.md5(f"{dept_id}:roon2026".encode()).hexdigest()[:8]
+        st.query_params["d"] = dept_id
+        st.query_params["t"] = tok
+except Exception:
+    pass
 
 # ── Lazy import ──────────────────────────────────────────────
 def _safe_import(module_path: str):
