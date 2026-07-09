@@ -194,6 +194,21 @@ def _form_add_employee(branches):
 
         if not fn or not ln:
             errors.append("กรุณากรอกชื่อและนามสกุล")
+
+        # ตรวจพนักงานซ้ำ (ชื่อ+นามสกุล+สาขาเดียวกัน)
+        df_check = read_sheet(SHEET_EMPLOYEES)
+        if not df_check.empty and not errors:
+            dup = df_check[
+                (df_check["first_name"].astype(str).str.strip() == fn.strip()) &
+                (df_check["last_name"].astype(str).str.strip() == ln.strip()) &
+                (df_check["branch_id"].astype(str).str.strip() == str(branch_id).strip()) &
+                (df_check["status"].astype(str) != "resigned")
+            ]
+            if not dup.empty:
+                errors.append(
+                    f"มีข้อมูลพนักงาน '{fn} {ln}' ของสาขานี้แล้วครับ "
+                    f"(ID: {dup.iloc[0]['employee_id']}) — ไม่ต้องเพิ่มซ้ำครับ"
+                )
         if not branch_id:
             errors.append("กรุณาเลือกสาขา")
         if not phone.strip():

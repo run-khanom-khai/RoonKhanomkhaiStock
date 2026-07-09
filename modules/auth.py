@@ -100,6 +100,23 @@ def check_login(dept_id: str, password: str) -> bool:
     return stored_hash == _hash(password)
 
 
+def get_dept_info(dept_id: str) -> dict:
+    """ดึงข้อมูล dept จาก dept_id"""
+    df = _get_dept_df()
+    if not df.empty and "dept_id" in df.columns:
+        row = df[df["dept_id"] == dept_id]
+        if not row.empty:
+            return {
+                "name":   row.iloc[0].get("dept_name", dept_id),
+                "menus":  row.iloc[0].get("menus", ""),
+            }
+    # fallback DEFAULT_DEPTS
+    info = DEFAULT_DEPTS.get(dept_id)
+    if info:
+        return {"name": info["name"], "menus": info["menus"]}
+    return {}
+
+
 def get_allowed_menus(dept_id: str) -> list:
     df = _get_dept_df()
     if df.empty:

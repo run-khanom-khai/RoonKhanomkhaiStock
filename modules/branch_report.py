@@ -36,8 +36,8 @@ SHEET_SCHEMAS = {
     ],
     SHEET_BRANCH_FRONT_SALES_PKG: [
         "front_packaging_id", "branch_report_id",
-        "paper_bag_qty", "plastic_box_qty", "drink_cup_qty",
-        "paper_bag_price", "plastic_box_price", "drink_cup_price",
+        "paper_bag_qty", "yellow_bag_qty", "plastic_box_qty", "drink_cup_qty",
+        "paper_bag_price", "yellow_bag_price", "plastic_box_price", "drink_cup_price",
         "expected_sales_amount",
     ],
     SHEET_BRANCH_DRINK_SALES: [
@@ -138,7 +138,25 @@ def _render_new_report():
             format_func=lambda k: f"{k} – {branch_opts[k]}"
         )
     with col3:
-        staff_id = st.text_input("👤 รหัสพนักงาน / ชื่อผู้กรอก")
+        # ดึงรายชื่อพนักงานของสาขาที่เลือก
+        from config import SHEET_EMPLOYEES
+        emp_df = read_sheet(SHEET_EMPLOYEES)
+        emp_options = ["-- กรอกชื่อเอง --"]
+        if not emp_df.empty and "branch_id" in emp_df.columns:
+            branch_emps = emp_df[
+                emp_df["branch_id"].astype(str).str.strip() == str(branch_id).strip()
+            ]
+            if not branch_emps.empty:
+                emp_options = (
+                    branch_emps["first_name"].astype(str) + " " +
+                    branch_emps["last_name"].astype(str)
+                ).tolist()
+                emp_options = ["-- เลือกพนักงาน --"] + emp_options
+        sel_emp = st.selectbox("👤 ชื่อผู้กรอก", emp_options, key="br_emp_sel")
+        if sel_emp in ["-- เลือกพนักงาน --","-- กรอกชื่อเอง --"]:
+            staff_id = st.text_input("พิมพ์ชื่อผู้กรอก", key="br_staff_manual")
+        else:
+            staff_id = sel_emp
 
     # ตรวจว่ารายงานวันนี้ของสาขานี้มีอยู่แล้วหรือยัง
     existing_df = read_sheet(SHEET_BRANCH_DAILY_REPORTS)
@@ -186,17 +204,20 @@ def _render_new_report():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**จำนวน (ชิ้น)**")
-        paper_bag_qty     = st.number_input("ถุงกระดาษ",     min_value=0, step=1, key="pb_qty")
-        plastic_box_qty   = st.number_input("กล่องพลาสติก",   min_value=0, step=1, key="plb_qty")
-        drink_cup_qty     = st.number_input("แก้วเครื่องดื่ม", min_value=0, step=1, key="dc_qty")
+        paper_bag_qty        = st.number_input("ถุงกระดาษขาว",     min_value=0, step=1, key="pb_qty")
+        yellow_bag_qty       = st.number_input("ถุงกระดาษเหลือง",  min_value=0, step=1, key="yb_qty")
+        plastic_box_qty      = st.number_input("กล่องพลาสติก",     min_value=0, step=1, key="plb_qty")
+        drink_cup_qty        = st.number_input("แก้วเครื่องดื่ม",  min_value=0, step=1, key="dc_qty")
     with col2:
         st.markdown("**ราคาต่อชิ้น (บาท)**")
-        paper_bag_price   = st.number_input("ราคาถุงกระดาษ",     min_value=0.0, step=0.5, value=0.0, format="%.2f", key="pb_price")
-        plastic_box_price = st.number_input("ราคากล่องพลาสติก",   min_value=0.0, step=0.5, value=0.0, format="%.2f", key="plb_price")
-        drink_cup_price   = st.number_input("ราคาแก้วเครื่องดื่ม", min_value=0.0, step=0.5, value=0.0, format="%.2f", key="dc_price")
+        paper_bag_price      = st.number_input("ราคาถุงกระดาษขาว",    min_value=0.0, step=0.5, value=0.0, format="%.2f", key="pb_price")
+        yellow_bag_price     = st.number_input("ราคาถุงกระดาษเหลือง", min_value=0.0, step=0.5, value=0.0, format="%.2f", key="yb_price")
+        plastic_box_price    = st.number_input("ราคากล่องพลาสติก",    min_value=0.0, step=0.5, value=0.0, format="%.2f", key="plb_price")
+        drink_cup_price      = st.number_input("ราคาแก้วเครื่องดื่ม", min_value=0.0, step=0.5, value=0.0, format="%.2f", key="dc_price")
 
     expected_sales_amount = (
         paper_bag_qty   * paper_bag_price +
+        yellow_bag_qty  * yellow_bag_price +
         plastic_box_qty * plastic_box_price +
         drink_cup_qty   * drink_cup_price
     )
