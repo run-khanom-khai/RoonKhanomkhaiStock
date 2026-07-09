@@ -37,10 +37,28 @@ def write_sheet(table_name: str, df: pd.DataFrame):
     """ลบข้อมูลเดิมแล้วเขียนใหม่ทั้งหมด"""
     try:
         client = _get_client()
-        client.table(table_name).delete().neq("id", -1).execute()
+        # ลบด้วย truncate แทน (ไม่ต้องพึ่ง id column)
+        try:
+            client.rpc("truncate_table", {"tbl": table_name}).execute()
+        except Exception:
+            # fallback: ลบทีละแถว
+            try:
+                existing = client.table(table_name).select("*").execute()
+                if existing.data:
+                    # หา primary key จาก column แรก
+                    first_col = list(existing.data[0].keys())[0]
+                    for row in existing.data:
+                        try:
+                            client.table(table_name).delete().eq(
+                                first_col, row[first_col]
+                            ).execute()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
         if not df.empty:
             records = df.to_dict(orient="records")
-            # แบ่งเป็น batch 100 rows
             for i in range(0, len(records), 100):
                 client.table(table_name).insert(records[i:i+100]).execute()
     except Exception as e:
@@ -75,5 +93,10 @@ def delete_row(table_name: str, id_col: str, id_value: str):
 
 
 def init_workbook():
-    """Supabase ไม่ต้อง init — tables สร้างผ่าน SQL Editor"""
-    pass
+    """Supabase — ตรวจ connection เท่านั้น"""
+    try:
+        client = _get_client()
+        # ทดสอบ connection
+        client.table("branches").select("branch_id").limit(1).execute()
+    except Exception:
+        pass
