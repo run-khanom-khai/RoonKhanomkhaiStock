@@ -273,6 +273,7 @@ with st.sidebar:
         "💰 การเงินและบัญชี (ดู)":         "view_finance",
         "📢 Marketing & Reconcile (ดู)":   "view_marketing",
         "💵 เงินสดย่อย (ดู)":              "view_petty",
+        "🎟️ รายงานคูปอง (ดู)":            "coupon_reports",
     }
     visible_menu = dict(VIEW_MENU)
     visible_menu["📤 Export Data"] = "export"     # ดู/ดาวน์โหลดได้ทุกคน (อ่านอย่างเดียว)
@@ -333,6 +334,7 @@ def _run_view(section_key):
             st.code(traceback.format_exc())
 
 if selected == "dashboard":        _run("modules.dashboard")
+elif selected == "coupon_reports": _run("modules.coupon_reports")
 elif selected.startswith("view_"): _run_view(selected)
 elif selected == "export":         _render_export()
 elif selected == "clear_data":     _render_clear_data()

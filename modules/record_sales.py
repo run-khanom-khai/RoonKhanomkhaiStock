@@ -28,6 +28,8 @@ from config import (
     SHEET_BRANCH_SALES_COUPONS,
     SHEET_BRANCH_SALES_SLIPS,
     SHEET_BRANCH_SALES_DELIVERY,
+    SHEET_BRANCH_FRONT_PRODUCTS,
+    SHEET_PRODUCT_PACKAGING,
 )
 from modules.excel_db import (
     read_sheet, write_sheet, init_workbook, append_row, update_row, delete_row,
@@ -117,6 +119,10 @@ SHEET_SCHEMAS = {
         "coupon_no", "amount", "status", "expire_date",
         "used_branch_id", "used_sale_id", "used_at", "issued_at",
     ],
+    # ขายหน้าร้านตามประเภทสินค้า (รอบ 20/8) — ระบบแตกบรรจุภัณฑ์ตาม BOM
+    SHEET_BRANCH_FRONT_PRODUCTS: [
+        "id", "sale_id", "branch_id", "product_id", "qty",
+    ],
 }
 
 
@@ -199,6 +205,65 @@ def _encode_image(uploaded_file) -> str:
     except Exception:
         pass  # ไม่มี PIL หรือไฟล์ไม่ใช่รูป — เก็บ raw
     return base64.b64encode(raw).decode()
+
+
+def _active_products():
+    """คืน list ของ (product_id, name, type) เฉพาะสินค้าที่ใช้งาน (is_active != FALSE)"""
+    try:
+        df = read_sheet(SHEET_PRODUCTS)
+    except Exception:
+        return []
+    if df is None or df.empty or "product_id" not in df.columns:
+        return []
+    out = []
+    for _, r in df.iterrows():
+        if "is_active" in df.columns and str(r.get("is_active", "")).upper() == "FALSE":
+            continue
+        pid = str(r.get("product_id", "")).strip()
+        if pid:
+            out.append((pid, str(r.get("product_name", "")).strip(),
+                        str(r.get("product_type", "")).strip()))
+    return out
+
+
+def _bom_by_product():
+    """product_id → [(packaging_field, qty), ...] จากตาราง product_packaging (BOM)"""
+    out = {}
+    try:
+        df = read_sheet(SHEET_PRODUCT_PACKAGING)
+    except Exception:
+        return out
+    if df is None or df.empty or "product_id" not in df.columns:
+        return out
+    for _, r in df.iterrows():
+        pid = str(r.get("product_id", "")).strip()
+        fld = str(r.get("packaging_field", "")).strip()
+        if pid and fld:
+            out.setdefault(pid, []).append((fld, _num(r.get("qty", 0))))
+    return out
+
+
+def _stock_field_labels():
+    """packaging_field → ป้ายชื่อ (จาก STOCK_FIELDS ของฝ่ายตรวจนับ)"""
+    try:
+        from modules.record_stock import STOCK_FIELDS
+        return {k: f"{label}" for k, label, _u in STOCK_FIELDS}
+    except Exception:
+        return {}
+
+
+def _get_front_products(sale_id):
+    """ดึง {product_id: qty} ที่บันทึกไว้ (ตอนแก้ไข)"""
+    out = {}
+    try:
+        df = read_sheet(SHEET_BRANCH_FRONT_PRODUCTS)
+        if df is not None and not df.empty and "sale_id" in df.columns:
+            m = df[df["sale_id"].astype(str) == str(sale_id)]
+            for _, r in m.iterrows():
+                out[str(r.get("product_id", "")).strip()] = _int(r.get("qty", 0))
+    except Exception:
+        pass
+    return out
 
 
 def _available_coupons_df():
@@ -340,10 +405,32 @@ def _release_coupons(sale_id):
             pass
 
 
+def _save_front_products(front_products, branch_id, sale_id):
+    """ลบของเดิม (ถ้ามี) แล้วบันทึกยอดขายตามประเภทสินค้าใหม่"""
+    try:
+        df = read_sheet(SHEET_BRANCH_FRONT_PRODUCTS)
+        if df is not None and not df.empty and "sale_id" in df.columns:
+            write_sheet(SHEET_BRANCH_FRONT_PRODUCTS,
+                        df[df["sale_id"].astype(str) != str(sale_id)])
+    except Exception:
+        pass
+    for pid, qty in (front_products or {}).items():
+        if _int(qty) <= 0:
+            continue
+        try:
+            fdf = read_sheet(SHEET_BRANCH_FRONT_PRODUCTS)
+            fid = next_id(fdf, "id", "FP")
+            append_row(SHEET_BRANCH_FRONT_PRODUCTS, {
+                "id": fid, "sale_id": sale_id, "branch_id": branch_id,
+                "product_id": pid, "qty": _int(qty)})
+        except Exception:
+            pass
+
+
 def _delete_children(sale_id):
-    """ลบ coupon / slip / delivery ที่ผูกกับ sale นี้"""
+    """ลบ coupon / slip / delivery / product-sales ที่ผูกกับ sale นี้"""
     for sheet in (SHEET_BRANCH_SALES_COUPONS, SHEET_BRANCH_SALES_SLIPS,
-                  SHEET_BRANCH_SALES_DELIVERY):
+                  SHEET_BRANCH_SALES_DELIVERY, SHEET_BRANCH_FRONT_PRODUCTS):
         try:
             df = read_sheet(sheet)
             if df.empty or "sale_id" not in df.columns:
@@ -545,6 +632,12 @@ def _render_form(branch_id, sale_date_str, existing):
     st.metric("🎟️ เงินจากคูปอง (คำนวณจากระบบ)", f"฿{coupon_amount:,.2f}")
 
     st.divider()
+    # ── ③.0 ขายตามประเภทสินค้า (ระบบแตกบรรจุภัณฑ์ให้ตามสูตร BOM) ──
+    front_products = _front_product_inputs(
+        prefix=f"rs_fp_{suffix}",
+        defaults=_get_front_products(sale_id) if is_edit else None)
+
+    st.divider()
     # ── บรรจุภัณฑ์ที่ขายได้ ─────────────────────────────────
     st.subheader("③ จำนวนบรรจุภัณฑ์ที่ขายได้ (หน้าร้าน + Delivery)")
     d_defaults = _get_delivery_defaults(sale_id) if is_edit else None
@@ -613,7 +706,8 @@ def _render_form(branch_id, sale_date_str, existing):
                     cash_amount=cash_amount, transfer_amount=transfer_amount,
                     coupon_amount=coupon_amount, total_amount=total_amount,
                     remark=remark, valid_coupons=valid_coupons,
-                    delivery_rows=delivery_rows, leftover=leftover)
+                    delivery_rows=delivery_rows, leftover=leftover,
+                    front_products=front_products)
                 n = _save_slips(slip_files, branch_id, sale_id,
                                 existing=len(existing_slips))
                 st.success("✅ บันทึกการแก้ไขสำเร็จ" +
@@ -626,7 +720,7 @@ def _render_form(branch_id, sale_date_str, existing):
                     coupon_amount=coupon_amount, total_amount=total_amount,
                     remark=remark, valid_coupons=valid_coupons,
                     delivery_rows=delivery_rows, slip_files=slip_files,
-                    leftover=leftover)
+                    leftover=leftover, front_products=front_products)
                 st.rerun()
         except Exception as e:
             st.error(
@@ -865,6 +959,46 @@ def _pkg_channel_input(ch, prefix, defaults, fields, expanded=False, boxed=False
     return row
 
 
+def _front_product_inputs(prefix, defaults=None):
+    """ช่องกรอกยอดขายหน้าร้าน 'ตามประเภทสินค้า' — คืน {product_id: qty}
+    พร้อมแสดงบรรจุภัณฑ์ที่ระบบแตกให้ตามสูตร BOM"""
+    d = defaults or {}
+    st.subheader("🛍️ ขายตามประเภทสินค้า (หน้าร้าน)")
+    st.caption("กรอกจำนวนขายแต่ละชนิดสินค้า — ระบบจะแตกบรรจุภัณฑ์ที่ใช้ให้อัตโนมัติตามสูตร (BOM) "
+               "ที่ตั้งไว้ในแอปหลังบ้าน")
+    prods = _active_products()
+    if not prods:
+        st.info("ยังไม่มีสินค้าในระบบ (เพิ่มที่แอปหลังบ้าน → สินค้าสำเร็จรูป)")
+        return {}
+
+    result = {}
+    # จัดเรียงตามประเภท เพื่อให้ดูง่าย
+    for i in range(0, len(prods), 3):
+        chunk = prods[i:i + 3]
+        cols = st.columns(len(chunk))
+        for col, (pid, name, ptype) in zip(cols, chunk):
+            label = f"{name or pid}" + (f" · {ptype}" if ptype else "")
+            q = col.number_input(f"{label}", min_value=0, step=1,
+                                 value=_int(d.get(pid, 0)), key=f"{prefix}_{pid}")
+            if q:
+                result[pid] = q
+
+    # แตกบรรจุภัณฑ์ตาม BOM (แสดงให้ดู)
+    bom = _bom_by_product()
+    labels = _stock_field_labels()
+    derived = {}
+    for pid, q in result.items():
+        for fld, per in bom.get(pid, []):
+            derived[fld] = derived.get(fld, 0) + q * per
+    if derived:
+        st.markdown("**📦 บรรจุภัณฑ์ที่ใช้ (ระบบคำนวณจากสูตร BOM):**")
+        parts = [f"{labels.get(f, f)} × {int(v):,}" for f, v in sorted(derived.items(), key=lambda x: -x[1])]
+        st.info(" · ".join(parts))
+    elif result:
+        st.caption("ℹ️ สินค้าที่เลือกยังไม่ได้ตั้งสูตรบรรจุภัณฑ์ (BOM) — ตั้งได้ที่แอปหลังบ้าน → สินค้าสำเร็จรูป")
+    return result
+
+
 def _packaging_inputs(prefix, defaults=None):
     """สร้างช่องกรอกบรรจุภัณฑ์ทั้ง หน้าร้าน + Grab/LineMan/อื่นๆ — คืน list of dict"""
     rows = []
@@ -958,6 +1092,9 @@ def _save_new(**kw):
         append_row(SHEET_BRANCH_SALES_DELIVERY,
                    _delivery_row_dict(did, sale_id, kw["branch_id"], r))
 
+    # ยอดขายตามประเภทสินค้า (หน้าร้าน)
+    _save_front_products(kw.get("front_products"), kw["branch_id"], sale_id)
+
     # สลิป
     n_slip = _save_slips(kw["slip_files"], kw["branch_id"], sale_id, existing=0)
 
@@ -1037,6 +1174,9 @@ def _save_edit(**kw):
         did = next_id(ddf, "id", "DV")
         append_row(SHEET_BRANCH_SALES_DELIVERY,
                    _delivery_row_dict(did, sale_id, kw["branch_id"], r))
+
+    # ยอดขายตามประเภทสินค้า (หน้าร้าน)
+    _save_front_products(kw.get("front_products"), kw["branch_id"], sale_id)
 
 
 def _delete_sale(sale_id):

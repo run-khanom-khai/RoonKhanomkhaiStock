@@ -43,6 +43,11 @@ SALE_AUDIT_DELIVERY_CHANNELS = ["Grab", "Line Man", "LineMan", "Shopee", "TikTok
                                 "Delivery", "Online"]   # ช่องทางที่ไม่รับเงิน (หักออกจาก 3.2)
 # สินค้าขนมไข่ (นับเงินจากบรรจุภัณฑ์กล่อง/ถุง) — สินค้าอื่นถือเป็นเครื่องดื่ม/รายการแยก
 SALE_AUDIT_EGG_PRODUCT_IDS = ["R-0001", "R-0002", "R-0003"]
+# คูปอง (รอบ 20/8): คำนำหน้าเริ่มต้น + รหัสผ่านอนุมัติก่อนบันทึกคูปอง
+COUPON_PREFIX_DEFAULT = "RN-"
+COUPON_APPROVE_PW     = "roon-coupon"   # รหัสผ่านผู้อนุมัติคูปอง (เปลี่ยนได้ในตาราง config: coupon_password)
+SHEET_SALE_AUDIT_CORRECTION = "sale_audit_correction"   # เมนู 1.3 เงินคืนจากความผิดพลาดสาขา
+SHEET_BRANCH_FRONT_PRODUCTS = "branch_front_products"   # ขายหน้าร้านตามประเภทสินค้า (แตกบรรจุภัณฑ์ตาม BOM)
 
 # ===== MASTER DATA =====
 SHEET_BRANCH_GROUPS   = "branch_groups"
@@ -51,6 +56,8 @@ SHEET_BRANCHES        = "branches"
 SHEET_ITEM_CATEGORIES = "item_categories"
 SHEET_ITEMS           = "items"
 SHEET_PRODUCTS        = "products"
+SHEET_PRODUCT_TYPES   = "product_types"       # ประเภทสินค้า (แก้ไขเองได้ — รอบ 2.x)
+SHEET_PRODUCT_PACKAGING = "product_packaging"  # สูตรบรรจุภัณฑ์ต่อสินค้า (BOM) — รอบ 2.x
 SHEET_SALES_CHANNELS  = "sales_channels"
 SHEET_USERS           = "users"
 SHEET_ROLES           = "roles"

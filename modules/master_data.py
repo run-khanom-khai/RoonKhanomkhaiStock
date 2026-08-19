@@ -6,6 +6,7 @@ import streamlit as st
 from config import (
     SHEET_BRANCH_GROUPS, SHEET_AREA_MASTER, SHEET_BRANCHES,
     SHEET_ITEM_CATEGORIES, SHEET_ITEMS, SHEET_PRODUCTS,
+    SHEET_PRODUCT_TYPES, SHEET_PRODUCT_PACKAGING,
     SHEET_SALES_CHANNELS, SHEET_USERS, SHEET_ROLES,
 )
 from modules.excel_db import read_sheet, write_sheet, append_row, update_row, delete_row
@@ -21,6 +22,35 @@ def seed_all():
     _seed_item_categories()
     _seed_sales_channels()
     _seed_roles()
+    _seed_product_types()
+
+
+def _seed_product_types():
+    # ประเภทสินค้า (id = ชื่อ) — แก้ไข/เพิ่มเองได้ในภายหลัง
+    data = [
+        ("ขนมไข่", "ขนมไข่", "TRUE"),
+        ("เครื่องดื่ม", "เครื่องดื่ม", "TRUE"),
+        ("ของฝาก", "ของฝาก", "TRUE"),
+        ("อื่น ๆ", "อื่น ๆ", "TRUE"),
+    ]
+    _seed_if_empty(SHEET_PRODUCT_TYPES,
+                   ["product_type_id", "product_type_name", "is_active"], data)
+
+
+def _product_type_options():
+    """คืน list ชื่อประเภทสินค้าจากตาราง (fallback = ค่าเริ่มต้น 4 ประเภท)"""
+    try:
+        df = read_sheet(SHEET_PRODUCT_TYPES)
+        if df is not None and not df.empty and "product_type_name" in df.columns:
+            act = df
+            if "is_active" in df.columns:
+                act = df[df["is_active"].astype(str).str.upper() != "FALSE"]
+            names = [str(x).strip() for x in act["product_type_name"].tolist() if str(x).strip()]
+            if names:
+                return names
+    except Exception:
+        pass
+    return ["ขนมไข่", "เครื่องดื่ม", "ของฝาก", "อื่น ๆ"]
 
 
 def _seed_if_empty(sheet_name: str, columns: list, rows: list):
@@ -146,6 +176,10 @@ def render_master_data_accounting():
 def _render_branches():
     st.subheader("🏪 จัดการสาขา")
 
+    # ── จัดการกลุ่มสาขา (ก่อนเมนูเพิ่มสาขา) ──
+    _render_branch_group_manager()
+    st.divider()
+
     df = read_sheet(SHEET_BRANCHES)
     bg_df = read_sheet(SHEET_BRANCH_GROUPS)
     area_df = read_sheet(SHEET_AREA_MASTER)
@@ -184,6 +218,84 @@ def _render_branches():
         _form_add_branch(bg_options, area_options)
     else:
         _form_edit_branch(df, bg_options, area_options)
+
+
+def _render_branch_group_manager():
+    """จัดการกลุ่มสาขา: เพิ่ม / เปลี่ยนชื่อ (พร้อม cascade อัปเดตทุกสาขาในกลุ่ม)"""
+    try:
+        from config import SALE_AUDIT_MALL_GROUPS
+    except Exception:
+        SALE_AUDIT_MALL_GROUPS = ["Shopping Mall", "Market", "Event"]
+
+    with st.expander("🗂️ จัดการกลุ่มสาขา (เพิ่ม / แก้ไขชื่อกลุ่ม)", expanded=False):
+        bg_df = read_sheet(SHEET_BRANCH_GROUPS)
+        cur_groups = []
+        if bg_df is not None and not bg_df.empty and "branch_group_id" in bg_df.columns:
+            cur_groups = [str(x).strip() for x in bg_df["branch_group_id"].tolist() if str(x).strip()]
+        st.caption("กลุ่มปัจจุบัน: " + (", ".join(cur_groups) if cur_groups else "— ยังไม่มี —"))
+
+        c1, c2 = st.tabs(["➕ เพิ่มกลุ่มใหม่", "✏️ เปลี่ยนชื่อกลุ่ม"])
+
+        # ── เพิ่มกลุ่มใหม่ ──
+        with c1:
+            new_name = st.text_input("ชื่อกลุ่มสาขาใหม่", key="bg_add_name",
+                                     placeholder="เช่น Robinson, Lotus, ตลาดนัด")
+            if st.button("💾 เพิ่มกลุ่ม", key="bg_add_btn", type="primary"):
+                nm = new_name.strip()
+                if not nm:
+                    st.error("กรุณากรอกชื่อกลุ่ม")
+                elif nm in cur_groups:
+                    st.error(f"มีกลุ่ม '{nm}' อยู่แล้ว")
+                else:
+                    try:
+                        append_row(SHEET_BRANCH_GROUPS, {
+                            "branch_group_id": nm, "branch_group_name": nm,
+                            "is_active": "TRUE"})
+                        st.success(f"✅ เพิ่มกลุ่ม '{nm}' แล้ว")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"บันทึกไม่สำเร็จ: {e}")
+
+        # ── เปลี่ยนชื่อกลุ่ม (cascade) ──
+        with c2:
+            if not cur_groups:
+                st.info("ยังไม่มีกลุ่มให้แก้ไข")
+            else:
+                old = st.selectbox("เลือกกลุ่มที่จะเปลี่ยนชื่อ", cur_groups, key="bg_edit_old")
+                new2 = st.text_input("ชื่อใหม่", key="bg_edit_new", value=old)
+                if old in SALE_AUDIT_MALL_GROUPS:
+                    st.warning(f"⚠️ กลุ่ม '{old}' ถูกใช้ล็อกรหัสผ่านเมนู 1.1 ของ Sale Audit — "
+                               "ถ้าเปลี่ยนชื่อ ต้องแก้ค่า SALE_AUDIT_MALL_GROUPS ใน config.py ด้วย "
+                               "ไม่งั้นการล็อกรหัสจะเพี้ยน")
+                if st.button("💾 เปลี่ยนชื่อ + อัปเดตทุกสาขาในกลุ่ม", key="bg_edit_btn",
+                             type="primary"):
+                    nm = new2.strip()
+                    if not nm:
+                        st.error("กรุณากรอกชื่อใหม่")
+                    elif nm == old:
+                        st.info("ชื่อเดิมกับชื่อใหม่เหมือนกัน ไม่มีการเปลี่ยนแปลง")
+                    elif nm in cur_groups:
+                        st.error(f"มีกลุ่ม '{nm}' อยู่แล้ว — เลือกชื่ออื่น")
+                    else:
+                        try:
+                            # 1) เปลี่ยนชื่อกลุ่มในตาราง branch_groups (id = ชื่อ)
+                            update_row(SHEET_BRANCH_GROUPS, "branch_group_id", old,
+                                       {"branch_group_id": nm, "branch_group_name": nm})
+                            # 2) cascade: อัปเดตทุกสาขาที่อยู่กลุ่มเดิม → กลุ่มใหม่
+                            bdf = read_sheet(SHEET_BRANCHES)
+                            n_upd = 0
+                            if bdf is not None and not bdf.empty and "branch_group_id" in bdf.columns:
+                                hit = bdf[bdf["branch_group_id"].astype(str).str.strip() == old]
+                                for _, br in hit.iterrows():
+                                    update_row(SHEET_BRANCHES, "branch_id",
+                                               str(br["branch_id"]),
+                                               {"branch_group_id": nm})
+                                    n_upd += 1
+                            st.success(f"✅ เปลี่ยนชื่อกลุ่ม '{old}' → '{nm}' แล้ว "
+                                       f"(อัปเดต {n_upd} สาขา)")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"เปลี่ยนชื่อไม่สำเร็จ: {e}")
 
 
 def _find_bank_by_accountno(acc_no):
@@ -463,6 +575,9 @@ def _form_edit_item(df, cat_options):
 def _render_products():
     st.subheader("🥚 จัดการสินค้าสำเร็จรูป (Products)")
 
+    # ── จัดการประเภทสินค้า (Product Type) — 2.3 ──
+    _render_product_type_manager()
+
     df = read_sheet(SHEET_PRODUCTS)
 
     search = st.text_input("🔍 ค้นหา Product", key="product_search")
@@ -491,6 +606,10 @@ def _render_products():
     else:
         _form_edit_product(df, item_options)
 
+    # ── สูตรบรรจุภัณฑ์ต่อสินค้า (BOM) — 2.2 ──
+    st.divider()
+    _render_product_bom_editor(df)
+
 
 def _form_add_product(item_options):
     with st.form("form_add_product"):
@@ -498,7 +617,7 @@ def _form_add_product(item_options):
         col1, col2 = st.columns(2)
         with col1:
             product_name = st.text_input("ชื่อสินค้า *")
-            product_type = st.selectbox("ประเภท", ["ขนมไข่", "เครื่องดื่ม", "ของฝาก", "อื่น ๆ"])
+            product_type = st.selectbox("ประเภท", _product_type_options())
             size = st.text_input("ขนาด (เช่น S, M, L, 6ชิ้น)")
         with col2:
             price = st.number_input("ราคาขาย (บาท)", min_value=0.0, step=1.0)
@@ -544,8 +663,12 @@ def _form_edit_product(df, item_options):
         col1, col2 = st.columns(2)
         with col1:
             product_name = st.text_input("ชื่อสินค้า *", value=row.get("product_name", ""))
-            type_opts = ["ขนมไข่", "เครื่องดื่ม", "ของฝาก", "อื่น ๆ"]
-            type_idx = type_opts.index(row.get("product_type")) if row.get("product_type") in type_opts else 0
+            type_opts = _product_type_options()
+            # เผื่อประเภทเดิมของสินค้าไม่มีในลิสต์ (เช่น ลบประเภทไปแล้ว) — เพิ่มเข้าไปกันหลุด
+            cur_type = str(row.get("product_type", "")).strip()
+            if cur_type and cur_type not in type_opts:
+                type_opts = [cur_type] + type_opts
+            type_idx = type_opts.index(cur_type) if cur_type in type_opts else 0
             product_type = st.selectbox("ประเภท", type_opts, index=type_idx)
             size = st.text_input("ขนาด", value=row.get("size", ""))
         with col2:
@@ -583,6 +706,170 @@ def _form_edit_product(df, item_options):
             delete_row(SHEET_PRODUCTS, "product_id", selected_id)
             st.warning(f"🗑️ ลบ Product {selected_id} แล้ว")
             st.rerun()
+
+
+# ──────────────────────────────────────────────
+# ประเภทสินค้า (Product Type) — 2.3
+# ──────────────────────────────────────────────
+def _render_product_type_manager():
+    with st.expander("🏷️ จัดการประเภทสินค้า (เพิ่ม / แก้ไข — เช่น เบเกอรี่, อาหารตามสั่ง)",
+                     expanded=False):
+        _seed_product_types()
+        tdf = read_sheet(SHEET_PRODUCT_TYPES)
+        cur = []
+        if tdf is not None and not tdf.empty and "product_type_id" in tdf.columns:
+            cur = [str(x).strip() for x in tdf["product_type_id"].tolist() if str(x).strip()]
+        st.caption("ประเภทปัจจุบัน: " + (", ".join(cur) if cur else "— ยังไม่มี —"))
+
+        ta, tb = st.tabs(["➕ เพิ่มประเภท", "✏️ เปลี่ยนชื่อประเภท"])
+        with ta:
+            nm = st.text_input("ชื่อประเภทใหม่", key="pt_add",
+                               placeholder="เช่น เบเกอรี่, อาหารตามสั่ง")
+            if st.button("💾 เพิ่มประเภท", key="pt_add_btn", type="primary"):
+                n = nm.strip()
+                if not n:
+                    st.error("กรุณากรอกชื่อประเภท")
+                elif n in cur:
+                    st.error(f"มีประเภท '{n}' อยู่แล้ว")
+                else:
+                    try:
+                        append_row(SHEET_PRODUCT_TYPES, {
+                            "product_type_id": n, "product_type_name": n,
+                            "is_active": "TRUE"})
+                        st.success(f"✅ เพิ่มประเภท '{n}' แล้ว")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"บันทึกไม่สำเร็จ: {e}")
+        with tb:
+            if not cur:
+                st.info("ยังไม่มีประเภทให้แก้ไข")
+            else:
+                old = st.selectbox("เลือกประเภทที่จะเปลี่ยนชื่อ", cur, key="pt_edit_old")
+                new = st.text_input("ชื่อใหม่", value=old, key="pt_edit_new")
+                if st.button("💾 เปลี่ยนชื่อ + อัปเดตสินค้าในประเภทนี้", key="pt_edit_btn",
+                             type="primary"):
+                    n = new.strip()
+                    if not n:
+                        st.error("กรุณากรอกชื่อใหม่")
+                    elif n == old:
+                        st.info("ชื่อเดิมกับชื่อใหม่เหมือนกัน")
+                    elif n in cur:
+                        st.error(f"มีประเภท '{n}' อยู่แล้ว")
+                    else:
+                        try:
+                            update_row(SHEET_PRODUCT_TYPES, "product_type_id", old,
+                                       {"product_type_id": n, "product_type_name": n})
+                            # cascade: อัปเดต products.product_type เดิม → ใหม่
+                            pdf = read_sheet(SHEET_PRODUCTS)
+                            n_upd = 0
+                            if pdf is not None and not pdf.empty and "product_type" in pdf.columns:
+                                hit = pdf[pdf["product_type"].astype(str).str.strip() == old]
+                                for _, pr in hit.iterrows():
+                                    update_row(SHEET_PRODUCTS, "product_id",
+                                               str(pr["product_id"]), {"product_type": n})
+                                    n_upd += 1
+                            st.success(f"✅ เปลี่ยนประเภท '{old}' → '{n}' (อัปเดต {n_upd} สินค้า)")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"เปลี่ยนชื่อไม่สำเร็จ: {e}")
+
+
+# ──────────────────────────────────────────────
+# สูตรบรรจุภัณฑ์ต่อสินค้า (BOM) — 2.2
+# ──────────────────────────────────────────────
+def _stock_field_options():
+    """คืน [(field_key, 'ชื่อ (หน่วย)')] ของบรรจุภัณฑ์ที่ฝ่ายตรวจสอบนับ (STOCK_FIELDS)"""
+    try:
+        from modules.record_stock import STOCK_FIELDS
+        return [(k, f"{label} ({unit})") for k, label, unit in STOCK_FIELDS]
+    except Exception:
+        return [("plastic_box_qty", "กล่องพลาสติก (กล่อง)"),
+                ("paper_bag_qty", "ถุงกระดาษ (ถุง)"),
+                ("printed_carry_bag_qty", "ถุงหูหิ้วกระดาษพิมพ์ลาย (ใบ)"),
+                ("water_cup_qty", "แก้วน้ำ (ใบ)"),
+                ("ice_cream_cup_qty", "แก้วไอศครีม (ใบ)")]
+
+
+def _render_product_bom_editor(products_df):
+    st.markdown("#### 🧩 สูตรบรรจุภัณฑ์ต่อสินค้า (BOM)")
+    st.caption("กำหนดว่าสินค้า 1 หน่วย ใช้บรรจุภัณฑ์อะไรบ้าง กี่ชิ้น — "
+               "เช่น ขนมไข่ 40 ชิ้น = กล่องพลาสติก 2 + ถุงกระดาษ 1 "
+               "(ขาย 1 หน่วย → บรรจุภัณฑ์หายไป 3 ชิ้น) "
+               "ระบบ Sale Audit จะใช้สูตรนี้ตรวจว่าบรรจุภัณฑ์ที่หายไปตรงกับยอดขายหรือไม่")
+
+    if products_df is None or products_df.empty:
+        st.info("ยังไม่มีสินค้าให้ตั้งสูตร — เพิ่มสินค้าก่อน")
+        return
+
+    prod_ids = products_df["product_id"].tolist()
+    pid = st.selectbox(
+        "เลือกสินค้า", prod_ids, key="bom_pid",
+        format_func=lambda x: f"{x} – {products_df[products_df['product_id']==x]['product_name'].values[0]}")
+
+    sf_opts = _stock_field_options()
+    sf_map = dict(sf_opts)
+
+    # รายการสูตรเดิมของสินค้านี้
+    bdf = read_sheet(SHEET_PRODUCT_PACKAGING)
+    mine = pd.DataFrame()
+    if bdf is not None and not bdf.empty and "product_id" in bdf.columns:
+        mine = bdf[bdf["product_id"].astype(str) == str(pid)]
+
+    if mine is not None and not mine.empty:
+        st.markdown("**สูตรปัจจุบัน:**")
+        for _, r in mine.iterrows():
+            fld = str(r.get("packaging_field", ""))
+            lab = sf_map.get(fld, fld)
+            cc1, cc2 = st.columns([4, 1])
+            cc1.markdown(f"- {lab} × **{_to_int(r.get('qty', 0))}**")
+            if cc2.button("🗑️ ลบ", key=f"bom_del_{r.get('bom_id')}"):
+                try:
+                    delete_row(SHEET_PRODUCT_PACKAGING, "bom_id", str(r.get("bom_id")))
+                    st.success("ลบบรรจุภัณฑ์ในสูตรแล้ว")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"ลบไม่สำเร็จ: {e}")
+    else:
+        st.caption("— ยังไม่มีสูตรสำหรับสินค้านี้ —")
+
+    st.markdown("**➕ เพิ่มบรรจุภัณฑ์เข้าสูตร:**")
+    a1, a2, a3 = st.columns([3, 1, 1])
+    with a1:
+        sel_field = st.selectbox("บรรจุภัณฑ์", [k for k, _ in sf_opts],
+                                 format_func=lambda k: sf_map.get(k, k), key="bom_field")
+    with a2:
+        qty = st.number_input("จำนวน/หน่วย", min_value=1, step=1, value=1, key="bom_qty")
+    with a3:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        add = st.button("💾 เพิ่ม", key="bom_add", type="primary", use_container_width=True)
+    if add:
+        # กันซ้ำบรรจุภัณฑ์ชนิดเดิมในสูตรเดียวกัน → อัปเดตจำนวนแทน
+        exists = None
+        if mine is not None and not mine.empty and "packaging_field" in mine.columns:
+            hit = mine[mine["packaging_field"].astype(str) == sel_field]
+            if not hit.empty:
+                exists = str(hit.iloc[0].get("bom_id"))
+        try:
+            if exists:
+                update_row(SHEET_PRODUCT_PACKAGING, "bom_id", exists, {"qty": int(qty)})
+                st.success("อัปเดตจำนวนในสูตรแล้ว")
+            else:
+                nb = read_sheet(SHEET_PRODUCT_PACKAGING)
+                bid = next_id(nb, "bom_id", "BOM")
+                append_row(SHEET_PRODUCT_PACKAGING, {
+                    "bom_id": bid, "product_id": str(pid),
+                    "packaging_field": sel_field, "qty": int(qty)})
+                st.success("เพิ่มบรรจุภัณฑ์เข้าสูตรแล้ว")
+            st.rerun()
+        except Exception as e:
+            st.error(f"บันทึกไม่สำเร็จ: {e} (ตรวจว่ารัน SQL product_packaging แล้ว)")
+
+
+def _to_int(v, d=0):
+    try:
+        return int(float(str(v).replace(",", "").strip() or 0))
+    except Exception:
+        return d
 
 
 # ──────────────────────────────────────────────

@@ -600,3 +600,42 @@ alter table branch_sales add column if not exists drink_damage_qty      text;
 alter table branch_sales add column if not exists drink_damage_photo    text;
 
 notify pgrst, 'reload schema';
+
+-- ============================================================
+-- ROUND 2.x (19/8/2026) — product_types + product_packaging (BOM)
+-- ============================================================
+create table if not exists product_types (
+    product_type_id text primary key, product_type_name text, is_active text);
+alter table product_types add column if not exists product_type_name text;
+alter table product_types add column if not exists is_active text;
+alter table product_types enable row level security;
+insert into product_types (product_type_id, product_type_name, is_active)
+values ('ขนมไข่','ขนมไข่','TRUE'),('เครื่องดื่ม','เครื่องดื่ม','TRUE'),
+       ('ของฝาก','ของฝาก','TRUE'),('อื่น ๆ','อื่น ๆ','TRUE')
+on conflict (product_type_id) do nothing;
+
+create table if not exists product_packaging (
+    bom_id text primary key, product_id text, packaging_field text, qty text);
+alter table product_packaging add column if not exists product_id text;
+alter table product_packaging add column if not exists packaging_field text;
+alter table product_packaging add column if not exists qty text;
+alter table product_packaging enable row level security;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================
+-- ROUND 20/8/2026 — coupons.approver + sale_audit_correction + branch_front_products
+-- ============================================================
+alter table coupons add column if not exists approver text;
+
+create table if not exists sale_audit_correction (
+    correction_id text primary key, sale_date text, branch_id text,
+    bank_account_id text, bank_account_no text, amount text, reason text,
+    slip_photo text, entered_by text, created_at text);
+alter table sale_audit_correction enable row level security;
+
+create table if not exists branch_front_products (
+    id text primary key, sale_id text, branch_id text, product_id text, qty text);
+alter table branch_front_products enable row level security;
+
+notify pgrst, 'reload schema';

@@ -26,7 +26,8 @@ from config import (
     SHEET_MARKETING_DAILY_SALES, SHEET_MARKETING_DAILY_SALES_ITEMS,
     SHEET_SALE_BANK_INCOME, SHEET_SALE_AUDIT_CONFIG, SHEET_SALE_AUDIT_RESOLUTION,
     SALE_AUDIT_MALL_GROUPS, SALE_AUDIT_DEFAULT_PW, SALE_AUDIT_DELIVERY_CHANNELS,
-    SALE_AUDIT_EGG_PRODUCT_IDS,
+    SALE_AUDIT_EGG_PRODUCT_IDS, SHEET_PRODUCT_PACKAGING,
+    SHEET_SALE_AUDIT_CORRECTION, SHEET_BRANCH_FRONT_PRODUCTS,
 )
 from modules.excel_db import read_sheet, append_row, update_row
 from modules.record_stock import STOCK_FIELDS
@@ -136,6 +137,74 @@ def _num(v):
         return 0.0 if f != f else f      # กัน NaN (NaN != NaN)
     except Exception:
         return 0.0
+
+
+def _bom_map():
+    """product_id → [(packaging_field, qty), ...] จากตาราง product_packaging (BOM)"""
+    out = {}
+    try:
+        df = read_sheet(SHEET_PRODUCT_PACKAGING)
+    except Exception:
+        return out
+    if df is None or df.empty or "product_id" not in df.columns:
+        return out
+    for _, r in df.iterrows():
+        pid = str(r.get("product_id", "")).strip()
+        fld = str(r.get("packaging_field", "")).strip()
+        if pid and fld:
+            out.setdefault(pid, []).append((fld, _num(r.get("qty", 0))))
+    return out
+
+
+def _front_product_sales(branch_id, D):
+    """ยอดขายตามประเภทสินค้าที่สาขา key หน้าร้าน (branch_front_products) — product_id → qty"""
+    out = {}
+    try:
+        fdf = read_sheet(SHEET_BRANCH_FRONT_PRODUCTS)
+        sdf = read_sheet(SHEET_BRANCH_SALES)
+    except Exception:
+        return out
+    if fdf is None or fdf.empty or sdf is None or sdf.empty:
+        return out
+    sids = sdf[(sdf["branch_id"].astype(str).str.strip() == str(branch_id)) &
+               (sdf["sale_date"].astype(str).str[:10] == str(D)[:10])]["sale_id"].astype(str).tolist()
+    if not sids or "sale_id" not in fdf.columns:
+        return out
+    m = fdf[fdf["sale_id"].astype(str).isin(sids)]
+    for _, r in m.iterrows():
+        pid = str(r.get("product_id", "")).strip()
+        if pid:
+            out[pid] = out.get(pid, 0) + _num(r.get("qty", 0))
+    return out
+
+
+def _product_sales_all(branch_id, D):
+    """จำนวนขายรวมแยกตามสินค้า (product_id → qty) ของสาขา+วัน D
+    ใช้คำนวณบรรจุภัณฑ์ที่ควรใช้ตามสูตร BOM
+    - ให้ความสำคัญกับยอดที่สาขา key หน้าร้าน (branch_front_products) ก่อน
+    - ถ้าไม่มี ใช้ยอดจาก marketing_daily_sales_items แทน"""
+    front = _front_product_sales(branch_id, D)
+    if front:
+        return front
+    try:
+        ms = read_sheet(SHEET_MARKETING_DAILY_SALES)
+        items = read_sheet(SHEET_MARKETING_DAILY_SALES_ITEMS)
+    except Exception:
+        return {}
+    if ms is None or ms.empty or items is None or items.empty:
+        return {}
+    m = ms[(ms["branch_id"].astype(str).str.strip() == str(branch_id)) &
+           (ms["sales_date"].astype(str).str[:10] == str(D)[:10])]
+    sids = m["marketing_sales_id"].astype(str).tolist() if "marketing_sales_id" in m.columns else []
+    if not sids:
+        return {}
+    it = items[items["marketing_sales_id"].astype(str).isin(sids)]
+    agg = {}
+    for _, r in it.iterrows():
+        pid = str(r.get("product_id", "")).strip()
+        if pid:
+            agg[pid] = agg.get(pid, 0) + _num(r.get("qty_sold", 0))
+    return agg
 
 
 def _fmt(n):
@@ -321,15 +390,18 @@ def render():
 # ══════════════════════════════════════════════════════════════════════
 def _render_bank_income():
     st.subheader("① บันทึกเงินเข้าธนาคารรายวัน (วันที่บันทึก = วันที่ขายจริง)")
-    s1, s2 = st.tabs([
+    s1, s2, s3 = st.tabs([
         "1.1 กลุ่ม Shopping Mall / Market (มีรหัสผ่าน)",
         "1.2 กลุ่มอื่น (ฝ่าย Sale Audit)",
+        "1.3 เงินคืนจากความผิดพลาดของสาขา",
     ])
     with s1:
         _bank_income_form(only_groups=SALE_AUDIT_MALL_GROUPS, need_pw=True, key="pw11")
     with s2:
         _bank_income_form(only_groups=None, exclude_groups=SALE_AUDIT_MALL_GROUPS,
                           need_pw=False, key="pw12")
+    with s3:
+        _correction_form(key="corr13")
 
 
 def _bank_income_form(only_groups=None, exclude_groups=None, need_pw=False, key="bi"):
@@ -430,6 +502,112 @@ def _bank_income_form(only_groups=None, exclude_groups=None, need_pw=False, key=
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 1.3 เงินคืนจากความผิดพลาดของสาขา (โอนกลับเข้าบริษัท)
+# ══════════════════════════════════════════════════════════════════════
+def _company_bank_options():
+    """คืน dict bank_account_id → 'ธนาคาร ... เลขที่ ... (ชื่อบัญชี)' ของบริษัท"""
+    out = {}
+    adf = read_sheet(SHEET_BANK_ACCOUNTS)
+    if adf is not None and not adf.empty and "bank_account_id" in adf.columns:
+        for _, r in adf.iterrows():
+            if "is_active" in adf.columns and str(r.get("is_active", "")).upper() == "FALSE":
+                continue
+            bid = str(r.get("bank_account_id", "")).strip()
+            if bid:
+                out[bid] = (f"{r.get('bank_name','') or '-'} · เลขที่ {r.get('account_no','') or '-'}"
+                            f" ({r.get('account_name','') or '-'})", r.to_dict())
+    return out
+
+
+def _correction_total(branch_id, D):
+    """รวมยอดเงินคืนจากความผิดพลาดของสาขา ของสาขา+วัน D"""
+    try:
+        df = read_sheet(SHEET_SALE_AUDIT_CORRECTION)
+    except Exception:
+        return 0.0
+    if df is None or df.empty or "branch_id" not in df.columns:
+        return 0.0
+    m = df[(df["branch_id"].astype(str) == str(branch_id)) &
+           (df["sale_date"].astype(str).str[:10] == str(D)[:10])]
+    return sum(_num(x) for x in m.get("amount", pd.Series()).tolist()) if not m.empty else 0.0
+
+
+def _correction_form(key="corr"):
+    st.markdown("##### 1.3 บันทึกเงินคืนจากความผิดพลาดของสาขา (โอนกลับเข้าบริษัท)")
+    st.caption("กรณีฝ่าย Sale Audit ติดตามเงินจากการทำงานผิดพลาดของสาขา แล้วสาขาโอนเงินคืนบริษัท")
+    bmap = _branch_group_map()
+    if not bmap:
+        st.warning("ยังไม่มีสาขาในระบบ")
+        return
+    c1, c2 = st.columns(2)
+    with c1:
+        branch_id = st.selectbox("🏪 เลือกสาขา", list(bmap.keys()),
+                                 format_func=lambda b: f"{b} – {bmap[b][0]}", key=f"{key}_br")
+    with c2:
+        sale_date = st.date_input("📅 วันที่ขาย (ที่ผิดพลาด)",
+                                  value=datetime.date.today() - datetime.timedelta(days=1),
+                                  key=f"{key}_dt")
+
+    bank_opts = _company_bank_options()
+    if not bank_opts:
+        st.warning("⚠️ ยังไม่มีบัญชีธนาคารบริษัทในระบบ (เพิ่มที่แอปหลังบ้าน → การเงินและบัญชี)")
+        return
+    bid = st.selectbox("🏦 ธนาคารบริษัทที่รับเงินเข้า", list(bank_opts.keys()),
+                       format_func=lambda b: bank_opts[b][0], key=f"{key}_bank")
+    bank = bank_opts[bid][1]
+    st.caption(f"เลขที่บัญชี: `{bank.get('account_no','')}`")
+
+    amount = st.number_input("💰 ยอดเงินผิดพลาดที่นำเข้าบัญชี", min_value=0.0, step=1.0,
+                             format="%.2f", key=f"{key}_amt")
+    reason = st.text_input("📝 หมายเหตุ/สาเหตุ (ถ้ามี)", key=f"{key}_reason")
+    slip = st.file_uploader("🧾 แนบสลิปการโอน", type=["png", "jpg", "jpeg"], key=f"{key}_slip")
+
+    if st.button("💾 บันทึกเงินคืน + บวกเข้ายอดบัญชี", type="primary", key=f"{key}_save"):
+        if amount <= 0:
+            st.error("กรุณากรอกยอดเงิน")
+            return
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        slip_b64 = ""
+        if slip is not None:
+            try:
+                slip_b64 = base64.b64encode(slip.getvalue()).decode()
+            except Exception:
+                slip_b64 = ""
+        try:
+            cdf = read_sheet(SHEET_SALE_AUDIT_CORRECTION)
+            cid = next_id(cdf, "correction_id", "COR")
+            append_row(SHEET_SALE_AUDIT_CORRECTION, {
+                "correction_id": cid, "sale_date": str(sale_date),
+                "branch_id": str(branch_id),
+                "bank_account_id": bid, "bank_account_no": bank.get("account_no", ""),
+                "amount": amount, "reason": reason.strip(), "slip_photo": slip_b64,
+                "entered_by": st.session_state.get("dept_name", ""),
+                "created_at": now,
+            })
+            new_bal = _add_to_bank_balance(bid, _num(amount))
+            st.success(f"✅ บันทึกเงินคืน ฿{amount:,.2f} แล้ว ({cid})")
+            if new_bal is not None:
+                st.info(f"🏦 ยอดคงเหลือบัญชีนี้ล่าสุด: ฿{new_bal:,.2f}")
+            st.rerun()
+        except Exception as e:
+            st.error(f"บันทึกไม่สำเร็จ: {e} (รัน SQL sale_audit_correction)")
+
+    # ประวัติเงินคืนของสาขานี้
+    cdf = read_sheet(SHEET_SALE_AUDIT_CORRECTION)
+    if cdf is not None and not cdf.empty and "branch_id" in cdf.columns:
+        show = cdf[cdf["branch_id"].astype(str) == str(branch_id)].sort_values("sale_date", ascending=False)
+        if not show.empty:
+            st.divider()
+            st.markdown("##### 📋 ประวัติเงินคืน (สาขานี้)")
+            st.dataframe(pd.DataFrame({
+                "วันขาย": show["sale_date"].astype(str),
+                "เลขบัญชี": show.get("bank_account_no", "").astype(str),
+                "ยอดเงิน": show["amount"].map(lambda x: f"{_num(x):,.2f}"),
+                "หมายเหตุ": show.get("reason", "").astype(str),
+            }), use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # ② เทียบยอดบรรจุภัณฑ์
 # ══════════════════════════════════════════════════════════════════════
 def _render_pkg_compare():
@@ -508,6 +686,52 @@ def _render_pkg_compare():
                   f"<td style='padding:5px;text-align:center;'>{dcell}</td></tr>")
     st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;'>{hdr2}{rows2}</table>",
                 unsafe_allow_html=True)
+
+    # ── ส่วน C: ตรวจตามสูตรสินค้า (BOM) ──
+    _render_bom_check(branch_id, D, au_D, au_Dp1)
+
+
+def _render_bom_check(branch_id, D, au_D, au_Dp1):
+    """เทียบ 'บรรจุภัณฑ์ที่ควรใช้ตามยอดขายสินค้า (สูตร BOM)' กับ 'ที่ฝ่ายตรวจสอบนับว่าใช้ไปจริง'"""
+    bom = _bom_map()
+    if not bom:
+        return   # ยังไม่ได้ตั้งสูตร BOM — ข้ามส่วนนี้ไป
+    st.markdown("#### 🅲 ตรวจตามสูตรสินค้า (BOM)")
+    st.caption("บรรจุภัณฑ์ที่ 'ควรใช้' = Σ (ยอดขายสินค้า × สูตรบรรจุภัณฑ์ต่อหน่วย) · "
+               "เทียบกับที่ฝ่ายตรวจสอบนับว่าใช้ไปจริง (เช้า D − เช้า D+1)")
+
+    sales = _product_sales_all(branch_id, D)
+    if not sales:
+        st.caption("— ยังไม่มียอดขายสินค้าที่บันทึกไว้สำหรับวันนี้ (คำนวณ BOM ไม่ได้) —")
+        return
+
+    # ควรใช้ตามยอดขาย: รวมเข้ารายบรรจุภัณฑ์ (packaging_field)
+    expected = {}
+    for pid, qty in sales.items():
+        for fld, per in bom.get(str(pid), []):
+            expected[fld] = expected.get(fld, 0) + _num(qty) * _num(per)
+    if not expected:
+        st.caption("— สินค้าที่ขายวันนี้ยังไม่ได้ตั้งสูตรบรรจุภัณฑ์ (BOM) —")
+        return
+
+    label_map = {k: label for k, label, _u in STOCK_FIELDS}
+    hdr = ("<tr>" + "".join(
+        f"<th style='padding:6px;background:#00695C;color:#fff;'>{h}</th>"
+        for h in ["บรรจุภัณฑ์", "ควรใช้ตามยอดขาย (BOM)", "ตรวจนับจริง (ใช้ไป)", "DIFF"]) + "</tr>")
+    rows = ""
+    for fld, exp in sorted(expected.items(), key=lambda x: -x[1]):
+        counted = _num(au_D.get(fld, 0)) - _num(au_Dp1.get(fld, 0))
+        diff = exp - counted
+        dcell = (f"<span style='color:#C62828;font-weight:700;'>{diff:+,.0f} (DIFF)</span>"
+                 if abs(diff) > 0.5 else "<span style='color:#2E7D32;'>0</span>")
+        rows += (f"<tr><td style='padding:5px;'>{label_map.get(fld, fld)}</td>"
+                 f"<td style='padding:5px;text-align:center;'>{_fmt(exp)}</td>"
+                 f"<td style='padding:5px;text-align:center;'>{_fmt(counted)}</td>"
+                 f"<td style='padding:5px;text-align:center;'>{dcell}</td></tr>")
+    st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;'>{hdr}{rows}</table>",
+                unsafe_allow_html=True)
+    st.caption("DIFF > 0 = บรรจุภัณฑ์หายมากกว่าที่ยอดขายควรใช้ (อาจมีของหาย/ไม่ได้บันทึกขาย) · "
+               "DIFF < 0 = ใช้น้อยกว่าที่ขาย (อาจนับสต๊อกคลาดเคลื่อน)")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -693,6 +917,36 @@ def _render_money_summary():
                     "⚠️ พบส่วนต่าง (DIFF): " + " · ".join(diffs) + "</div>", unsafe_allow_html=True)
     else:
         st.success("✅ ยอดทั้ง 3 ทางตรงกัน")
+
+    # ── ตารางเทียบเงินใหม่ (หลังจากการแก้ปัญหาเงิน DIFF) ──
+    corr = _correction_total(branch_id, D)
+    if corr > 0.5:
+        money_bank2 = money_bank + corr
+        st.markdown("#### 💰 ตารางเทียบเงิน 3 ทาง (หลังจากการแก้ปัญหาเงิน DIFF)")
+        st.caption(f"รวมเงินคืนจากความผิดพลาดของสาขา ฿{corr:,.2f} (เมนู 1.3) เข้ากับเงินเข้าธนาคารจริงแล้ว")
+        st.markdown(
+            f"<table style='width:100%;border-collapse:collapse;border:2px solid #2E7D32;'>"
+            f"<tr>"
+            f"<th style='padding:10px;background:#2E7D32;color:#fff;'>3.1 เงินจริงจากสาขาแจ้ง</th>"
+            f"<th style='padding:10px;background:#6A1B9A;color:#fff;'>3.2 เงินจากบรรจุภัณฑ์ (ตรวจสอบ)</th>"
+            f"<th style='padding:10px;background:#0D47A1;color:#fff;'>3.3 เงินเข้าธนาคาร + เงินคืน</th></tr>"
+            f"<tr>"
+            f"<td style='padding:14px;text-align:center;font-size:1.4rem;font-weight:800;'>฿{money_branch:,.2f}</td>"
+            f"<td style='padding:14px;text-align:center;font-size:1.4rem;font-weight:800;'>฿{total_pkg_money:,.2f}</td>"
+            f"<td style='padding:14px;text-align:center;font-size:1.4rem;font-weight:800;'>฿{money_bank2:,.2f}"
+            f"<br><small style='color:#888;font-weight:400;'>ธนาคาร {money_bank:,.0f} + เงินคืน {corr:,.0f}</small></td></tr>"
+            f"</table>", unsafe_allow_html=True)
+        diffs2 = []
+        if abs(money_branch - money_bank2) > 0.5:
+            diffs2.append(f"สาขาแจ้ง ≠ เงินเข้าธนาคาร+เงินคืน ({money_branch - money_bank2:+,.2f})")
+        if abs(money_branch - total_pkg_money) > 0.5:
+            diffs2.append(f"สาขาแจ้ง ≠ บรรจุภัณฑ์ ({money_branch - total_pkg_money:+,.2f})")
+        if diffs2:
+            st.markdown("<div style='background:#C62828;color:#fff;padding:10px;border-radius:8px;font-weight:700;'>"
+                        "⚠️ ยังมีส่วนต่างหลังแก้ไข: " + " · ".join(diffs2) + "</div>",
+                        unsafe_allow_html=True)
+        else:
+            st.success("✅ หลังแก้ปัญหาแล้ว ยอดทั้ง 3 ทางตรงกัน")
 
     # ── รูปภาพที่สาขาแนบ (สลิป) + รูปเสียหายจากฝ่ายตรวจสอบ ──
     st.divider()
