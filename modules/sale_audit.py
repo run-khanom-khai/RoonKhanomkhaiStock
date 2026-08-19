@@ -307,7 +307,7 @@ def _bank_income_form(only_groups=None, exclude_groups=None, need_pw=False, key=
                                  key=f"{key}_br")
     with c2:
         sale_date = st.date_input("📅 วันที่ขายจริง (วันที่บันทึกเงินเข้า)",
-                                  value=datetime.date.today(), key=f"{key}_dt")
+                                  value=datetime.date.today() - datetime.timedelta(days=1), key=f"{key}_dt")
     st.caption(f"กลุ่มสาขา: **{opts[branch_id][1]}**")
 
     # แสดงบัญชีธนาคารของสาขา
@@ -389,7 +389,7 @@ def _render_pkg_compare():
         branch_id = st.selectbox("🏪 สาขา", list(bmap.keys()),
                                  format_func=lambda b: f"{b} – {bmap[b][0]}", key="pc_br")
     with c2:
-        D = st.date_input("📅 วันที่ขายจริง (D)", value=datetime.date.today(), key="pc_d")
+        D = st.date_input("📅 วันที่ขายจริง (D)", value=datetime.date.today() - datetime.timedelta(days=1), key="pc_d")
     Dm1 = D - datetime.timedelta(days=1)
     Dp1 = D + datetime.timedelta(days=1)
     st.caption(f"D = **{D}** · D-1 = {Dm1} · D+1 = {Dp1}")
@@ -427,10 +427,10 @@ def _render_pkg_compare():
         d23 = ("<span style='color:#C62828;font-weight:700;'>(DIFF)</span>"
                if abs(used2 - used3) > 0.5 else "<span style='color:#2E7D32;'>OK</span>")
         rows_html += (f"<tr><td style='padding:5px;'>{label}</td>"
-                      f"<td style='padding:5px;text-align:right;'>{v1}</td>"
-                      f"<td style='padding:5px;text-align:right;'>{_fmt(used2)}</td>"
+                      f"<td style='padding:5px;text-align:center;'>{v1}</td>"
+                      f"<td style='padding:5px;text-align:center;'>{_fmt(used2)}</td>"
                       f"<td style='padding:5px;text-align:center;'>{d12}</td>"
-                      f"<td style='padding:5px;text-align:right;'>{_fmt(used3)}</td>"
+                      f"<td style='padding:5px;text-align:center;'>{_fmt(used3)}</td>"
                       f"<td style='padding:5px;text-align:center;'>{d23}</td></tr>")
     st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;'>{hdr}{rows_html}</table>",
                 unsafe_allow_html=True)
@@ -449,8 +449,8 @@ def _render_pkg_compare():
         dcell = (f"<span style='color:#C62828;font-weight:700;'>{diff:+,.0f} (DIFF)</span>"
                  if abs(diff) > 0.5 else "<span style='color:#2E7D32;'>0</span>")
         rows2 += (f"<tr><td style='padding:5px;'>{label}</td>"
-                  f"<td style='padding:5px;text-align:right;'>{_fmt(r1)}</td>"
-                  f"<td style='padding:5px;text-align:right;'>{_fmt(r2)}</td>"
+                  f"<td style='padding:5px;text-align:center;'>{_fmt(r1)}</td>"
+                  f"<td style='padding:5px;text-align:center;'>{_fmt(r2)}</td>"
                   f"<td style='padding:5px;text-align:center;'>{dcell}</td></tr>")
     st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;'>{hdr2}{rows2}</table>",
                 unsafe_allow_html=True)
@@ -484,7 +484,7 @@ def _render_money_summary():
         branch_id = st.selectbox("🏪 สาขา", list(bmap.keys()),
                                  format_func=lambda b: f"{b} – {bmap[b][0]}", key="ms_br")
     with c2:
-        D = st.date_input("📅 วันที่ขายจริง (D)", value=datetime.date.today(), key="ms_d")
+        D = st.date_input("📅 วันที่ขายจริง (D)", value=datetime.date.today() - datetime.timedelta(days=1), key="ms_d")
     Dp1 = D + datetime.timedelta(days=1)
 
     au_D   = _stock_row(SHEET_AUDIT_STOCK_BALANCE, "audit_date", D,   branch_id)
@@ -519,12 +519,12 @@ def _render_money_summary():
         no_money_total += deliv_online
         dmg_total += damaged
         detail_rows += (f"<tr><td style='padding:5px;'>{label}</td>"
-                        f"<td style='padding:5px;text-align:right;'>{_fmt(used_audit)}</td>"
-                        f"<td style='padding:5px;text-align:right;color:#E65100;'>{_fmt(deliv_online)}</td>"
-                        f"<td style='padding:5px;text-align:right;color:#C62828;'>{_fmt(damaged)}</td>"
-                        f"<td style='padding:5px;text-align:right;font-weight:700;'>{_fmt(payable)}</td>"
-                        f"<td style='padding:5px;text-align:right;'>{price:,.0f}</td>"
-                        f"<td style='padding:5px;text-align:right;'>{money:,.2f}</td></tr>")
+                        f"<td style='padding:5px;text-align:center;'>{_fmt(used_audit)}</td>"
+                        f"<td style='padding:5px;text-align:center;color:#E65100;'>{_fmt(deliv_online)}</td>"
+                        f"<td style='padding:5px;text-align:center;color:#C62828;'>{_fmt(damaged)}</td>"
+                        f"<td style='padding:5px;text-align:center;font-weight:700;'>{_fmt(payable)}</td>"
+                        f"<td style='padding:5px;text-align:center;'>{price:,.0f}</td>"
+                        f"<td style='padding:5px;text-align:center;'>{money:,.2f}</td></tr>")
     hdr = ("<tr>" + "".join(
         f"<th style='padding:6px;background:#6A1B9A;color:#fff;'>{h}</th>"
         for h in ["บรรจุภัณฑ์", "ใช้จริง(ตรวจสอบ)", "หัก Delivery/Online", "หัก เสียหาย",
@@ -544,9 +544,9 @@ def _render_money_summary():
         money = _num(qty) * _num(price)
         drink_money += money
         drows += (f"<tr><td style='padding:5px;'>{pid} – {name}</td>"
-                  f"<td style='padding:5px;text-align:right;'>{_fmt(qty)}</td>"
-                  f"<td style='padding:5px;text-align:right;'>{_num(price):,.0f}</td>"
-                  f"<td style='padding:5px;text-align:right;font-weight:700;'>{money:,.2f}</td></tr>")
+                  f"<td style='padding:5px;text-align:center;'>{_fmt(qty)}</td>"
+                  f"<td style='padding:5px;text-align:center;'>{_num(price):,.0f}</td>"
+                  f"<td style='padding:5px;text-align:center;font-weight:700;'>{money:,.2f}</td></tr>")
     if drows:
         dhdr = ("<tr>" + "".join(
             f"<th style='padding:6px;background:#00838F;color:#fff;'>{h}</th>"
