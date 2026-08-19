@@ -36,6 +36,7 @@ SHEET_MATERIAL_COST  = "material_cost"    # ตารางราคาต้น
 # ===== SALE AUDIT (แอปตรวจสอบยอดขาย) =====
 SHEET_SALE_BANK_INCOME  = "sale_bank_income"    # ยอดเงินขายเข้าธนาคารรายวัน/สาขา
 SHEET_SALE_AUDIT_CONFIG = "sale_audit_config"   # ตั้งค่า (เช่น รหัสผ่านเมนู 1.1)
+SHEET_SALE_AUDIT_RESOLUTION = "sale_audit_resolution"  # บันทึกชี้แจงการแก้ DIFF (แก้ไขได้ ลบไม่ได้)
 SALE_AUDIT_MALL_GROUPS  = ["Shopping Mall", "Market"]   # กลุ่มที่ใช้เมนู 1.1 (มีรหัสผ่าน)
 SALE_AUDIT_DEFAULT_PW    = "roon-mall"           # รหัสผ่านเริ่มต้นเมนู 1.1 (เปลี่ยนได้ในตาราง config)
 SALE_AUDIT_DELIVERY_CHANNELS = ["Grab", "Line Man", "LineMan", "Shopee", "TikTok", "NextGen",

@@ -264,46 +264,69 @@ def _form_edit_branch(df, bg_options, area_options):
                                format_func=lambda x: f"{x} – {df[df['branch_id']==x]['branch_name'].values[0]}")
     row = df[df["branch_id"] == selected_id].iloc[0]
 
-    with st.form("form_edit_branch"):
-        col1, col2 = st.columns(2)
-        with col1:
-            branch_name = st.text_input("ชื่อสาขา *", value=row.get("branch_name", ""))
-            bg_keys = list(bg_options.keys())
-            bg_idx = bg_keys.index(row.get("branch_group_id", bg_keys[0])) if row.get("branch_group_id") in bg_keys else 0
-            bg_label = st.selectbox("กลุ่มสาขา *", options=bg_keys,
-                                    format_func=lambda k: f"{k} – {bg_options[k]}",
-                                    index=bg_idx)
-        with col2:
-            area_keys = list(area_options.keys())
-            area_idx = area_keys.index(row.get("area_id", area_keys[0])) if row.get("area_id") in area_keys else 0
-            area_label = st.selectbox("พื้นที่ *", options=area_keys,
-                                      format_func=lambda k: f"{k} – {area_options[k]}",
-                                      index=area_idx)
-            status_opts = ["active", "inactive", "temporary_close"]
-            st_idx = status_opts.index(row.get("status", "active")) if row.get("status") in status_opts else 0
-            status = st.selectbox("สถานะ", status_opts, index=st_idx)
-        remark = st.text_input("หมายเหตุ", value=row.get("remark", ""))
+    bg_keys = list(bg_options.keys())
+    area_keys = list(area_options.keys())
+    status_opts = ["active", "inactive", "temporary_close"]
 
-        col_save, col_del = st.columns(2)
-        with col_save:
-            save = st.form_submit_button("💾 บันทึกการแก้ไข", type="primary")
-        with col_del:
-            delete = st.form_submit_button("🗑️ ลบสาขานี้")
+    # โหลดค่าของสาขาที่เลือกลง session (รีเซ็ตเมื่อเปลี่ยนสาขา) — ใช้ widget สดเพื่อตรวจบัญชีได้ทันที
+    if st.session_state.get("eb_prev") != selected_id:
+        st.session_state["eb_prev"] = selected_id
+        st.session_state["eb_name"] = str(row.get("branch_name", ""))
+        cur_bg = str(row.get("branch_group_id", ""))
+        st.session_state["eb_bg"] = cur_bg if cur_bg in bg_keys else (bg_keys[0] if bg_keys else "")
+        cur_area = str(row.get("area_id", ""))
+        st.session_state["eb_area"] = cur_area if cur_area in area_keys else (area_keys[0] if area_keys else "")
+        st.session_state["eb_status"] = row.get("status", "active") if row.get("status") in status_opts else "active"
+        st.session_state["eb_bank"] = str(row.get("bank_account_no", ""))
 
-        if save:
-            update_row(SHEET_BRANCHES, "branch_id", selected_id, {
-                "branch_name": branch_name,
-                "branch_group_id": bg_label,
-                "area_id": area_label,
-                "status": status,
-                "remark": remark,
-            })
-            st.success("✅ แก้ไขสาขาสำเร็จ")
-            st.rerun()
-        if delete:
-            delete_row(SHEET_BRANCHES, "branch_id", selected_id)
-            st.warning(f"🗑️ ลบสาขา {selected_id} แล้ว")
-            st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        branch_name = st.text_input("ชื่อสาขา *", key="eb_name")
+        bg_label = st.selectbox("กลุ่มสาขา * (แก้ไขได้ — มีผลต่อบัญชีรับเงิน)", options=bg_keys,
+                                format_func=lambda k: f"{k} – {bg_options.get(k, k)}", key="eb_bg")
+    with col2:
+        area_label = st.selectbox("พื้นที่ *", options=area_keys,
+                                  format_func=lambda k: f"{k} – {area_options.get(k, k)}", key="eb_area")
+        status = st.selectbox("สถานะ", status_opts, key="eb_status")
+
+    bank_no = st.text_input("🏦 รับเงินด้วยธนาคาร (ใส่เลขที่บัญชี)", key="eb_bank",
+                            help="ใส่เลขที่บัญชี ระบบจะตรวจว่ามีสมุดบัญชีเลขนี้ไหม")
+    bank_ok = True
+    if bank_no.strip():
+        info = _find_bank_by_accountno(bank_no.strip())
+        if info is None:
+            st.warning("❌ ไม่มีสมุดบัญชีเลขที่นี้ในระบบ — เพิ่มที่ 'การเงินและบัญชี → บัญชีธนาคาร' ก่อน")
+            bank_ok = False
+        else:
+            st.success(
+                f"✅ พบบัญชี: **{info.get('bank_name','') or '-'}** สาขา {info.get('bank_branch','') or '-'} · "
+                f"เลขที่ {info.get('account_no','')} · ชื่อบัญชี {info.get('account_name','') or '-'}")
+
+    col_save, col_del = st.columns(2)
+    with col_save:
+        save = st.button("💾 บันทึกการแก้ไข", type="primary", key="eb_save")
+    with col_del:
+        delete = st.button("🗑️ ลบสาขานี้", key="eb_del")
+
+    if save:
+        if bank_no.strip() and not bank_ok:
+            st.error("เลขที่บัญชีธนาคารยังไม่มีในระบบ — กรุณาตรวจสอบอีกครั้ง")
+            return
+        update_row(SHEET_BRANCHES, "branch_id", selected_id, {
+            "branch_name": branch_name,
+            "branch_group_id": bg_label,
+            "area_id": area_label,
+            "status": status,
+            "bank_account_no": bank_no.strip(),
+        })
+        st.success(f"✅ แก้ไขสาขา {selected_id} สำเร็จ (กลุ่ม: {bg_label})")
+        st.session_state["eb_prev"] = None   # ให้โหลดค่าใหม่รอบหน้า
+        st.rerun()
+    if delete:
+        delete_row(SHEET_BRANCHES, "branch_id", selected_id)
+        st.warning(f"🗑️ ลบสาขา {selected_id} แล้ว")
+        st.session_state["eb_prev"] = None
+        st.rerun()
 
 
 # ──────────────────────────────────────────────

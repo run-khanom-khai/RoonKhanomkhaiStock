@@ -24,7 +24,7 @@ from config import (
     SHEET_BRANCH_STOCK_DAILY, SHEET_AUDIT_STOCK_BALANCE,
     SHEET_BRANCH_SALES, SHEET_BRANCH_SALES_DELIVERY, SHEET_BRANCH_SALES_SLIPS,
     SHEET_MARKETING_DAILY_SALES, SHEET_MARKETING_DAILY_SALES_ITEMS,
-    SHEET_SALE_BANK_INCOME, SHEET_SALE_AUDIT_CONFIG,
+    SHEET_SALE_BANK_INCOME, SHEET_SALE_AUDIT_CONFIG, SHEET_SALE_AUDIT_RESOLUTION,
     SALE_AUDIT_MALL_GROUPS, SALE_AUDIT_DEFAULT_PW, SALE_AUDIT_DELIVERY_CHANNELS,
     SALE_AUDIT_EGG_PRODUCT_IDS,
 )
@@ -627,3 +627,87 @@ def _render_money_summary():
             pass
     if shown == 0:
         st.caption("— ยังไม่มีรูปภาพแนบ —")
+
+    # ── ④ ฝ่าย Audit ชี้แจงการแก้ปัญหา (แก้ไขได้ · ลบไม่ได้) ──
+    _render_resolution(branch_id, D)
+
+
+def _render_resolution(branch_id, D):
+    st.divider()
+    st.markdown("#### ④ ฝ่าย Audit ชี้แจงการแก้ปัญหา (แก้ไขได้ · ลบไม่ได้)")
+    rdf = read_sheet(SHEET_SALE_AUDIT_RESOLUTION)
+    row = {}
+    rid = None
+    if rdf is not None and not rdf.empty and "branch_id" in rdf.columns:
+        m = rdf[(rdf["branch_id"].astype(str) == str(branch_id)) &
+                (rdf["sale_date"].astype(str).str[:10] == str(D)[:10])]
+        if not m.empty:
+            row = m.iloc[-1].to_dict()
+            rid = str(row.get("resolution_id"))
+            st.caption(f"📝 มีบันทึกชี้แจงแล้ว ({rid}) — แก้ไขเพิ่มเติมได้ (ลบไม่ได้)")
+
+    c1, c2, c3 = st.columns([2, 1, 1])
+    with c1:
+        called_who = st.text_input("โทรหาใคร", value=str(row.get("called_who", "")), key=f"res_who_{branch_id}")
+    with c2:
+        cur_t = str(row.get("call_time", "")).strip()
+        try:
+            tval = datetime.time.fromisoformat(cur_t) if cur_t else datetime.datetime.now().time().replace(microsecond=0)
+        except Exception:
+            tval = datetime.datetime.now().time().replace(microsecond=0)
+        call_time = st.time_input("เวลา", value=tval, key=f"res_time_{branch_id}")
+    with c3:
+        cur_d = str(row.get("call_date", "")).strip()
+        try:
+            dval = datetime.date.fromisoformat(cur_d[:10]) if cur_d else D
+        except Exception:
+            dval = D
+        call_date = st.date_input("วันที่", value=dval, key=f"res_date_{branch_id}")
+
+    how_fixed = st.text_area("แก้ไขอย่างไร", value=str(row.get("how_fixed", "")),
+                             height=90, key=f"res_how_{branch_id}")
+
+    # รูปภาพประกอบ (สูงสุด 5) — แสดงของเดิม + แนบใหม่ (แนบใหม่ = แทนที่)
+    existing_photos = [str(row.get(f"photo{i}", "") or "") for i in range(1, 6)]
+    existing_photos = [p for p in existing_photos if p]
+    if existing_photos:
+        st.caption(f"รูปที่แนบไว้ ({len(existing_photos)} รูป):")
+        pc = st.columns(5)
+        for i, p in enumerate(existing_photos):
+            try:
+                pc[i % 5].image(base64.b64decode(p), use_container_width=True)
+            except Exception:
+                pass
+    new_files = st.file_uploader("📷 แนบรูปประกอบการแก้ปัญหา (สูงสุด 5 รูป — แนบใหม่ = แทนที่ของเดิม)",
+                                 type=["png", "jpg", "jpeg"], accept_multiple_files=True,
+                                 key=f"res_photos_{branch_id}")
+
+    if st.button("💾 บันทึกการชี้แจง (แก้ไขได้ · ลบไม่ได้)", type="primary", key=f"res_save_{branch_id}"):
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        payload = {
+            "sale_date": str(D), "branch_id": str(branch_id),
+            "called_who": called_who.strip(), "call_time": str(call_time)[:5],
+            "call_date": str(call_date), "how_fixed": how_fixed.strip(),
+            "created_by": st.session_state.get("dept_name", ""), "updated_at": now,
+        }
+        # รูป: ถ้าแนบใหม่ → ใช้ชุดใหม่ (สูงสุด 5) ; ถ้าไม่แนบ → คงของเดิม
+        if new_files:
+            for i in range(1, 6):
+                payload[f"photo{i}"] = ""
+            for i, f in enumerate(new_files[:5], 1):
+                try:
+                    payload[f"photo{i}"] = base64.b64encode(f.read()).decode()
+                except Exception:
+                    payload[f"photo{i}"] = ""
+        try:
+            if rid:
+                update_row(SHEET_SALE_AUDIT_RESOLUTION, "resolution_id", rid, payload)
+                st.success("✅ อัปเดตการชี้แจงแล้ว")
+            else:
+                payload["resolution_id"] = next_id(rdf, "resolution_id", "RES")
+                payload["created_at"] = now
+                append_row(SHEET_SALE_AUDIT_RESOLUTION, payload)
+                st.success(f"✅ บันทึกการชี้แจงสำเร็จ ({payload['resolution_id']})")
+            st.rerun()
+        except Exception as e:
+            st.error(f"บันทึกไม่สำเร็จ: {e} (รัน roon_sale_audit_resolution.sql)")
