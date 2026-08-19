@@ -7,9 +7,11 @@ import pandas as pd
 
 from config import (
     SHEET_BRANCHES, SHEET_BANK_ACCOUNTS, SHEET_BANK_TRANSACTIONS,
-    SHEET_DAILY_SALES_ACCOUNTING, SHEET_BRANCH_EXPENSES,
+    SHEET_DAILY_SALES_ACCOUNTING, SHEET_BRANCH_EXPENSES, SHEET_COUPONS,
 )
-from modules.excel_db import read_sheet, write_sheet, append_row, update_row, init_workbook
+from modules.excel_db import (
+    read_sheet, write_sheet, append_row, update_row, delete_row, init_workbook,
+)
 from utils.id_generator import next_id
 
 FIN_SCHEMAS = {
@@ -98,6 +100,150 @@ def render():
     with tab2: _render_transactions()
     with tab3: _render_daily_sales_accounting()
     with tab4: _render_branch_expenses()
+
+
+def render_accounting():
+    """Finance & Accounting สำหรับฝ่ายบัญชี — ตัดเมนู 'ยอดขายฝ่ายบัญชี' ออก + เพิ่ม 'คูปอง'"""
+    _init_fin_sheets()
+    st.title("💰 การเงินและบัญชี (Finance & Accounting)")
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🏦 บัญชีธนาคาร",
+        "💸 เงินเข้า / เงินออก",
+        "📋 ค่าใช้จ่ายสาขา",
+        "🎟️ คูปอง",
+    ])
+    with tab1: _render_bank_accounts()
+    with tab2: _render_transactions()
+    with tab3: _render_branch_expenses()
+    with tab4: _render_coupons()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# คูปอง — บันทึกคูปองเข้าระบบ (เพิ่ม/ดู/ลบ) สำหรับฝ่ายบัญชี/การเงิน
+# ══════════════════════════════════════════════════════════════════════
+def _coupon_num(v):
+    try:
+        return float(str(v).replace(",", "").strip() or 0)
+    except Exception:
+        return 0.0
+
+
+def _render_coupons():
+    st.subheader("🎟️ บันทึกคูปองเข้าระบบ")
+    st.caption("คูปองที่เพิ่มที่นี่ สาขาจะเห็นและใช้บันทึกเงินคูปองได้ (ใช้แล้วระบบตัดเป็น used อัตโนมัติ)")
+
+    try:
+        cdf = read_sheet(SHEET_COUPONS)
+    except Exception:
+        cdf = pd.DataFrame()
+
+    # ── เพิ่มคูปองทีละใบ ──
+    with st.form("form_add_coupon", clear_on_submit=True):
+        st.markdown("#### ➕ เพิ่มคูปอง 1 ใบ")
+        c1, c2 = st.columns(2)
+        with c1:
+            coupon_no = st.text_input("เลขคูปอง *", key="cp_no")
+        with c2:
+            amount = st.number_input("มูลค่า (บาท) *", min_value=0.0, step=1.0, key="cp_amt")
+        add1 = st.form_submit_button("💾 บันทึกคูปอง", type="primary")
+    if add1:
+        cno = coupon_no.strip()
+        if not cno:
+            st.error("กรุณากรอกเลขคูปอง")
+        elif not cdf.empty and "coupon_no" in cdf.columns and \
+                (cdf["coupon_no"].astype(str).str.strip() == cno).any():
+            st.error(f"มีเลขคูปอง {cno} อยู่แล้ว")
+        else:
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                append_row(SHEET_COUPONS, {
+                    "coupon_no": cno, "amount": amount, "status": "active",
+                    "used_branch_id": "", "used_sale_id": "", "used_at": "",
+                    "issued_at": now})
+                st.success(f"✅ เพิ่มคูปอง {cno} (฿{amount:,.0f}) แล้ว")
+                st.rerun()
+            except Exception as e:
+                st.error(f"บันทึกไม่สำเร็จ: {e} (ตรวจว่ารัน roon_new_tables.sql แล้ว)")
+
+    # ── เพิ่มเป็นชุด (ออกเลขอัตโนมัติ) ──
+    with st.expander("➕➕ ออกคูปองเป็นชุด (auto-run เลข)"):
+        with st.form("form_batch_coupon", clear_on_submit=False):
+            b1, b2, b3, b4 = st.columns(4)
+            with b1: prefix = st.text_input("คำนำหน้า", value="RC-", key="cpb_pre")
+            with b2: start = st.number_input("เริ่มเลข", min_value=1, step=1, value=1, key="cpb_start")
+            with b3: count = st.number_input("จำนวนใบ", min_value=1, max_value=500, step=1, value=10, key="cpb_count")
+            with b4: bamt = st.number_input("มูลค่า/ใบ", min_value=0.0, step=1.0, key="cpb_amt")
+            digits = st.number_input("จำนวนหลักของเลข (เช่น 4 = 0001)", min_value=1, max_value=8, value=4, key="cpb_digits")
+            addb = st.form_submit_button("💾 ออกคูปองเป็นชุด", type="primary")
+        if addb:
+            existing = set()
+            if not cdf.empty and "coupon_no" in cdf.columns:
+                existing = set(cdf["coupon_no"].astype(str).str.strip())
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            made, skipped = 0, 0
+            for i in range(int(count)):
+                cno = f"{prefix}{int(start)+i:0{int(digits)}d}"
+                if cno in existing:
+                    skipped += 1
+                    continue
+                try:
+                    append_row(SHEET_COUPONS, {
+                        "coupon_no": cno, "amount": bamt, "status": "active",
+                        "used_branch_id": "", "used_sale_id": "", "used_at": "",
+                        "issued_at": now})
+                    made += 1
+                except Exception as e:
+                    st.error(f"หยุดที่ {cno}: {e}")
+                    break
+            st.success(f"✅ ออกคูปอง {made} ใบ" + (f" (ข้ามซ้ำ {skipped} ใบ)" if skipped else ""))
+            st.rerun()
+
+    st.divider()
+    # ── รายการคูปอง (ดู/ลบ) ──
+    st.markdown("#### 📋 คูปองในระบบ")
+    if cdf is None or cdf.empty:
+        st.info("ยังไม่มีคูปองในระบบ")
+        return
+    show = cdf.copy()
+    st_l = show.get("status", pd.Series([""] * len(show))).astype(str).str.strip().str.lower()
+    n_active = int((~st_l.isin(["used", "ใช้แล้ว"])).sum())
+    n_used = int(st_l.isin(["used", "ใช้แล้ว"]).sum())
+    col = st.columns(3)
+    col[0].metric("คูปองทั้งหมด", f"{len(show):,}")
+    col[1].metric("ยังใช้ได้", f"{n_active:,}")
+    col[2].metric("ใช้แล้ว", f"{n_used:,}")
+
+    only = st.selectbox("กรอง", ["ทั้งหมด", "ยังใช้ได้", "ใช้แล้ว"], key="cp_filter")
+    if only == "ยังใช้ได้":
+        show = show[~st_l.isin(["used", "ใช้แล้ว"]).values]
+    elif only == "ใช้แล้ว":
+        show = show[st_l.isin(["used", "ใช้แล้ว"]).values]
+    disp = pd.DataFrame({
+        "เลขคูปอง": show["coupon_no"].astype(str),
+        "มูลค่า": show.get("amount", pd.Series([""] * len(show))).map(lambda x: f"{_coupon_num(x):,.0f}"),
+        "สถานะ": show.get("status", pd.Series([""] * len(show))).astype(str),
+        "สาขาที่ใช้": show.get("used_branch_id", pd.Series([""] * len(show))).astype(str),
+        "วันที่ใช้": show.get("used_at", pd.Series([""] * len(show))).astype(str),
+    })
+    st.dataframe(disp, use_container_width=True, hide_index=True)
+
+    # ลบคูปอง (เฉพาะที่ยังไม่ถูกใช้)
+    unused_ids = show[~st_l.reindex(show.index).isin(["used", "ใช้แล้ว"]).values]["coupon_no"].astype(str).tolist() \
+        if "coupon_no" in show.columns else []
+    if unused_ids:
+        d1, d2 = st.columns([3, 1])
+        with d1:
+            del_no = st.selectbox("เลือกคูปองที่จะลบ (เฉพาะที่ยังไม่ถูกใช้)", unused_ids, key="cp_del_sel")
+        with d2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("🗑️ ลบคูปอง", key="cp_del_btn", use_container_width=True):
+                try:
+                    delete_row(SHEET_COUPONS, "coupon_no", del_no)
+                    st.success(f"ลบคูปอง {del_no} แล้ว")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"ลบไม่สำเร็จ: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -318,3 +464,4 @@ def _render_branch_expenses():
         st.download_button("⬇️ Export Excel",
                            data=buf.getvalue(), file_name="branch_expenses.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+# updated 

@@ -1,0 +1,14 @@
+# ความลับ — ห้าม push ขึ้น GitHub เด็ดขาด
+.streamlit/secrets.toml
+*.env
+.env
+
+# ไฟล์ขยะ/ชั่วคราว
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.zip
+*.rar
+~$*
+~WRL*.tmp

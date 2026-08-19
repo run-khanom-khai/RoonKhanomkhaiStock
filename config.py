@@ -11,6 +11,38 @@ APP_TITLE  = "ROON KHANOMKHAI – ระบบบริหารจัดกา�
 APP_ICON   = "🥚"
 APP_LAYOUT = "wide"
 
+# ===== BRANCH LOGIN (รอบ 1: login ด้วยรหัสสาขา) =====
+SHEET_BRANCH_LOGIN = "branch_login"
+
+# ===== COUPON (รอบ 1: คูปอง — HQ เติมในรอบ 3) =====
+SHEET_COUPONS = "coupons"
+
+# ===== BRANCH SALES ENTRY (รอบ 1: บันทึกรายการขาย) =====
+SHEET_BRANCH_SALES          = "branch_sales"
+SHEET_BRANCH_SALES_COUPONS  = "branch_sales_coupons"
+SHEET_BRANCH_SALES_SLIPS    = "branch_sales_slips"
+SHEET_BRANCH_SALES_DELIVERY = "branch_sales_delivery"
+
+# ===== BRANCH STOCK ENTRY (รอบ 2: บันทึกสต๊อก) =====
+SHEET_BRANCH_STOCK_DAILY = "branch_stock_daily"
+
+# ===== AUDIT STOCK COUNT (รอบ 3: ฝ่ายตรวจสอบนับสต๊อกจริง) =====
+SHEET_AUDIT_STOCK_BALANCE = "audit_stock_balance"
+
+# ===== PURCHASING – RAW MATERIAL DAILY (ฝ่ายจัดซื้อ: วัตถุดิบรายวัน + ต้นทุน) =====
+SHEET_MATERIAL_DAILY = "material_daily"   # long format: 1 แถว/วัตถุดิบ/วัน
+SHEET_MATERIAL_COST  = "material_cost"    # ตารางราคาต้นทุนต่อหน่วย (ตั้ง/แก้ได้)
+
+# ===== SALE AUDIT (แอปตรวจสอบยอดขาย) =====
+SHEET_SALE_BANK_INCOME  = "sale_bank_income"    # ยอดเงินขายเข้าธนาคารรายวัน/สาขา
+SHEET_SALE_AUDIT_CONFIG = "sale_audit_config"   # ตั้งค่า (เช่น รหัสผ่านเมนู 1.1)
+SALE_AUDIT_MALL_GROUPS  = ["Shopping Mall", "Market"]   # กลุ่มที่ใช้เมนู 1.1 (มีรหัสผ่าน)
+SALE_AUDIT_DEFAULT_PW    = "roon-mall"           # รหัสผ่านเริ่มต้นเมนู 1.1 (เปลี่ยนได้ในตาราง config)
+SALE_AUDIT_DELIVERY_CHANNELS = ["Grab", "Line Man", "LineMan", "Shopee", "TikTok", "NextGen",
+                                "Delivery", "Online"]   # ช่องทางที่ไม่รับเงิน (หักออกจาก 3.2)
+# สินค้าขนมไข่ (นับเงินจากบรรจุภัณฑ์กล่อง/ถุง) — สินค้าอื่นถือเป็นเครื่องดื่ม/รายการแยก
+SALE_AUDIT_EGG_PRODUCT_IDS = ["R-0001", "R-0002", "R-0003"]
+
 # ===== MASTER DATA =====
 SHEET_BRANCH_GROUPS   = "branch_groups"
 SHEET_AREA_MASTER     = "area_master"
@@ -67,6 +99,7 @@ SHEET_BRANCH_EXPENSES       = "branch_expenses"
 SHEET_MARKETING_DAILY_SALES       = "marketing_daily_sales"
 SHEET_MARKETING_DAILY_SALES_ITEMS = "marketing_daily_sales_items"
 SHEET_SALES_RECONCILE             = "sales_reconcile"
+SHEET_MARKETING_POS_RECONCILE     = "marketing_pos_reconcile"   # ตรวจยอด POS vs สาขา (15/5/2569)
 
 # ===== LOOKUP LISTS =====
 PURCHASE_CATEGORIES = [
@@ -90,7 +123,46 @@ ASSET_STATUSES   = ["ใช้งานอยู่","ส่งซ่อม","�
 ASSET_LOCATIONS  = ["หน้าร้าน","หลังร้าน","ครัวกลาง","สำนักงาน","อื่น ๆ"]
 REPAIR_STATUSES  = ["กำลังซ่อม","ซ่อมเสร็จแล้ว","ยกเลิก","ซ่อมไม่ได้"]
 
+
+# ===== PETTY CASH SHEETS =====
+SHEET_PETTY_CASH_FUNDS        = "petty_cash_funds"
+SHEET_PETTY_CASH_TRANSACTIONS = "petty_cash_transactions"
+
+PETTY_CASH_ROLES   = ["branch_staff", "finance_hq", "admin"]
+PETTY_CASH_STATUSES = ["รอโอน", "โอนแล้ว", "ยกเลิก"]
+
+
+# ===== PETTY CASH REQUEST SHEETS =====
+SHEET_PETTY_CASH_REQUESTS     = "petty_cash_requests"
+SHEET_PETTY_CASH_ATTACHMENTS  = "petty_cash_attachments"
+
+PETTY_CASH_REQUEST_STATUSES = [
+    "draft", "submitted", "waiting_transfer",
+    "paid", "waiting_original_document", "rejected", "cancelled",
+]
+PETTY_CASH_REQUEST_STATUS_TH = {
+    "draft":                    "📝 แบบร่าง",
+    "submitted":                "📨 ส่งแล้ว",
+    "waiting_transfer":         "⏳ รอโอน",
+    "paid":                     "✅ โอนแล้ว",
+    "waiting_original_document":"📄 รอเอกสารจริง",
+    "rejected":                 "❌ ไม่อนุมัติ",
+    "cancelled":                "🚫 ยกเลิก",
+}
+PETTY_CASH_EXPENSE_TYPES = [
+    "ค่าเดินทาง", "ค่าอาหาร/เครื่องดื่ม", "ค่าวัสดุสำนักงาน",
+    "เบิกซื้อของภายในร้าน", "ค่าซ่อมแซมเล็กน้อย",
+    "ค่าสาธารณูปโภค", "ค่าขนส่ง", "ค่าทำความสะอาด", "อื่น ๆ",
+]
+PETTY_CASH_FILE_TYPES = ["receipt", "id_card", "travel_proof", "other"]
+
 ALL_SHEETS = [
+    # Branch Login / Coupon / Sales Entry (รอบ 1)
+    SHEET_BRANCH_LOGIN, SHEET_COUPONS,
+    SHEET_BRANCH_SALES, SHEET_BRANCH_SALES_COUPONS,
+    SHEET_BRANCH_SALES_SLIPS, SHEET_BRANCH_SALES_DELIVERY,
+    SHEET_BRANCH_STOCK_DAILY, SHEET_AUDIT_STOCK_BALANCE,
+    SHEET_MATERIAL_DAILY, SHEET_MATERIAL_COST,
     # Master
     SHEET_BRANCH_GROUPS, SHEET_AREA_MASTER, SHEET_BRANCHES,
     SHEET_ITEM_CATEGORIES, SHEET_ITEMS, SHEET_PRODUCTS,
@@ -116,10 +188,12 @@ ALL_SHEETS = [
     # Finance & Accounting
     SHEET_BANK_ACCOUNTS, SHEET_BANK_TRANSACTIONS,
     SHEET_DAILY_SALES_ACCOUNTING, SHEET_BRANCH_EXPENSES,
+    SHEET_PETTY_CASH_FUNDS, SHEET_PETTY_CASH_TRANSACTIONS,
+    SHEET_PETTY_CASH_REQUESTS, SHEET_PETTY_CASH_ATTACHMENTS,
     # Asset Management
     SHEET_ASSETS, SHEET_ASSET_REPAIRS,
     # Marketing
     SHEET_MARKETING_DAILY_SALES, SHEET_MARKETING_DAILY_SALES_ITEMS,
-    SHEET_SALES_RECONCILE,
+    SHEET_SALES_RECONCILE, SHEET_MARKETING_POS_RECONCILE,
 ]
 

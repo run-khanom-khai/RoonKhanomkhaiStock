@@ -18,7 +18,7 @@ from config import (
     SHEET_DAILY_PACKAGING_COST,
 )
 from modules.excel_db import (
-    read_sheet, write_sheet, append_row, init_workbook
+    read_sheet, write_sheet, append_row, init_workbook, _use_supabase
 )
 from utils.id_generator import next_id
 
@@ -30,7 +30,7 @@ PKG_FIELDS = [
     ("กล่องพลาสติก",         "plastic_box_qty",            "plastic_box_audit_qty"),
     ("แก้วเครื่องดื่ม",       "drink_cup_qty",              "drink_cup_audit_qty"),
     ("ฝาแก้ว",               "cup_lid_qty",                "cup_lid_audit_qty"),
-    ("ยางรัด",               "band_qty",                   "band_audit_qty"),
+    ("สายคาด",               "band_qty",                   "band_audit_qty"),
     ("ไม้เสียบ (แพ็ก)",      "skewer_pack_qty",            "skewer_pack_audit_qty"),
     ("ถุงร้อน (แพ็ก)",       "hot_bag_pack_qty",           "hot_bag_pack_audit_qty"),
     ("ถุงหิ้วพิมพ์ลาย",       "printed_carry_bag_qty",      "printed_carry_bag_audit_qty"),
@@ -79,11 +79,43 @@ AUDIT_SCHEMAS = {
 
 
 def _init_audit_sheets():
-    init_workbook()
+    """
+    สร้าง/ซ่อมโครงสร้างตาราง Audit
+    หลักการ: เติมได้ ลบไม่ได้ — ห้ามเขียนทับข้อมูลเดิมเด็ดขาด
+    """
+    try:
+        init_workbook()
+    except Exception:
+        pass
+
+    # Supabase ต้องแก้ schema ด้วย migration เท่านั้น เพราะ write_sheet()
+    # ลบข้อมูลเดิมก่อนเขียนใหม่ จึงห้าม initializer แตะตารางโดยเด็ดขาด
+    if _use_supabase():
+        return
+
     for sheet_name, columns in AUDIT_SCHEMAS.items():
-        df = read_sheet(sheet_name)
-        if df.empty or list(df.columns) != columns:
-            write_sheet(sheet_name, pd.DataFrame(columns=columns))
+        try:
+            df = read_sheet(sheet_name)
+        except Exception:
+            continue  # อ่านไม่ได้ชั่วคราว (quota/network) — ข้ามไป ไม่แตะข้อมูล
+
+        if df is None:
+            continue
+
+        # แยกไม่ได้ว่า "ตารางใหม่" หรือ "อ่านล้มเหลวแล้วได้ DataFrame ว่าง"
+        # จึงต้องข้ามเสมอเพื่อรักษาข้อมูลเดิม
+        if len(df.columns) == 0:
+            continue
+
+        # กรณีมีตารางอยู่แล้ว → เติมเฉพาะคอลัมน์ที่ขาด ห้ามลบข้อมูลเดิม
+        missing = [c for c in columns if c not in df.columns]
+        if missing:
+            for c in missing:
+                df[c] = ""
+            try:
+                write_sheet(sheet_name, df)
+            except Exception:
+                pass
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -21,6 +21,7 @@ from config import (
 from modules.excel_db import (
     read_sheet, write_sheet, init_workbook, append_row, read_sheet
 )
+from modules.branch_lock import branch_selector
 from utils.id_generator import next_id
 
 
@@ -36,8 +37,8 @@ SHEET_SCHEMAS = {
     ],
     SHEET_BRANCH_FRONT_SALES_PKG: [
         "front_packaging_id", "branch_report_id",
-        "paper_bag_qty", "plastic_box_qty", "drink_cup_qty",
-        "paper_bag_price", "plastic_box_price", "drink_cup_price",
+        "paper_bag_qty", "yellow_bag_qty", "plastic_box_qty", "drink_cup_qty",
+        "paper_bag_price", "yellow_bag_price", "plastic_box_price", "drink_cup_price",
         "expected_sales_amount",
     ],
     SHEET_BRANCH_DRINK_SALES: [
@@ -131,14 +132,33 @@ def _render_new_report():
         if branches_df.empty:
             st.warning("⚠️ ยังไม่มีข้อมูลสาขา กรุณาเพิ่มสาขาใน Master Data ก่อน")
             return
-        branch_opts = dict(zip(branches_df["branch_id"], branches_df["branch_name"]))
-        branch_id = st.selectbox(
-            "🏪 สาขา",
-            options=list(branch_opts.keys()),
-            format_func=lambda k: f"{k} – {branch_opts[k]}"
+        branch_id = branch_selector(
+            branches_df,
+            label="🏪 สาขา",
+            key="br_branch_sel",
         )
+        if branch_id is None:
+            return
     with col3:
-        staff_id = st.text_input("👤 รหัสพนักงาน / ชื่อผู้กรอก")
+        # ดึงรายชื่อพนักงานของสาขาที่เลือก
+        from config import SHEET_EMPLOYEES
+        emp_df = read_sheet(SHEET_EMPLOYEES)
+        emp_options = ["-- กรอกชื่อเอง --"]
+        if not emp_df.empty and "branch_id" in emp_df.columns:
+            branch_emps = emp_df[
+                emp_df["branch_id"].astype(str).str.strip() == str(branch_id).strip()
+            ]
+            if not branch_emps.empty:
+                emp_options = (
+                    branch_emps["first_name"].astype(str) + " " +
+                    branch_emps["last_name"].astype(str)
+                ).tolist()
+                emp_options = ["-- เลือกพนักงาน --"] + emp_options
+        sel_emp = st.selectbox("👤 ชื่อผู้กรอก", emp_options, key="br_emp_sel")
+        if sel_emp in ["-- เลือกพนักงาน --","-- กรอกชื่อเอง --"]:
+            staff_id = st.text_input("พิมพ์ชื่อผู้กรอก", key="br_staff_manual")
+        else:
+            staff_id = sel_emp
 
     # ตรวจว่ารายงานวันนี้ของสาขานี้มีอยู่แล้วหรือยัง
     existing_df = read_sheet(SHEET_BRANCH_DAILY_REPORTS)
@@ -186,17 +206,20 @@ def _render_new_report():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**จำนวน (ชิ้น)**")
-        paper_bag_qty     = st.number_input("ถุงกระดาษ",     min_value=0, step=1, key="pb_qty")
-        plastic_box_qty   = st.number_input("กล่องพลาสติก",   min_value=0, step=1, key="plb_qty")
-        drink_cup_qty     = st.number_input("แก้วเครื่องดื่ม", min_value=0, step=1, key="dc_qty")
+        paper_bag_qty        = st.number_input("ถุงกระดาษขาว",     min_value=0, step=1, key="pb_qty")
+        yellow_bag_qty       = st.number_input("ถุงกระดาษเหลือง",  min_value=0, step=1, key="yb_qty")
+        plastic_box_qty      = st.number_input("กล่องพลาสติก",     min_value=0, step=1, key="plb_qty")
+        drink_cup_qty        = st.number_input("แก้วเครื่องดื่ม",  min_value=0, step=1, key="dc_qty")
     with col2:
         st.markdown("**ราคาต่อชิ้น (บาท)**")
-        paper_bag_price   = st.number_input("ราคาถุงกระดาษ",     min_value=0.0, step=0.5, value=0.0, format="%.2f", key="pb_price")
-        plastic_box_price = st.number_input("ราคากล่องพลาสติก",   min_value=0.0, step=0.5, value=0.0, format="%.2f", key="plb_price")
-        drink_cup_price   = st.number_input("ราคาแก้วเครื่องดื่ม", min_value=0.0, step=0.5, value=0.0, format="%.2f", key="dc_price")
+        paper_bag_price      = st.number_input("ราคาถุงกระดาษขาว",    min_value=0.0, step=0.5, value=0.0, format="%.2f", key="pb_price")
+        yellow_bag_price     = st.number_input("ราคาถุงกระดาษเหลือง", min_value=0.0, step=0.5, value=0.0, format="%.2f", key="yb_price")
+        plastic_box_price    = st.number_input("ราคากล่องพลาสติก",    min_value=0.0, step=0.5, value=0.0, format="%.2f", key="plb_price")
+        drink_cup_price      = st.number_input("ราคาแก้วเครื่องดื่ม", min_value=0.0, step=0.5, value=0.0, format="%.2f", key="dc_price")
 
     expected_sales_amount = (
         paper_bag_qty   * paper_bag_price +
+        yellow_bag_qty  * yellow_bag_price +
         plastic_box_qty * plastic_box_price +
         drink_cup_qty   * drink_cup_price
     )
@@ -250,7 +273,7 @@ def _render_new_report():
         pkg_drink_cup_qty            = st.number_input("แก้วเครื่องดื่ม",       min_value=0, step=1, key="pkgdc")
         pkg_cup_lid_qty              = st.number_input("ฝาแก้ว",                min_value=0, step=1)
     with col2:
-        pkg_band_qty                 = st.number_input("ยางรัด",                min_value=0, step=1)
+        pkg_band_qty                 = st.number_input("สายคาด",                min_value=0, step=1)
         pkg_skewer_pack_qty          = st.number_input("ไม้เสียบ (แพ็ก)",       min_value=0, step=1)
         pkg_hot_bag_pack_qty         = st.number_input("ถุงร้อน (แพ็ก)",        min_value=0, step=1)
         pkg_printed_carry_bag_qty    = st.number_input("ถุงหิ้วพิมพ์ลาย",       min_value=0, step=1)
@@ -354,7 +377,7 @@ def _render_new_report():
     st.divider()
 
     # ── บันทึก ─────────────────────────────────────────────────────────
-    if st.button("💾 บันทึกรายงานประจำวัน", type="primary", use_container_width=True):
+    if st.button("💾 บันทึกรายงานประจำวัน", type="primary", width="stretch"):
         if not staff_id.strip():
             st.error("กรุณากรอกรหัสพนักงาน / ชื่อผู้กรอก")
             return
@@ -618,11 +641,28 @@ def _render_history():
     col1, col2 = st.columns(2)
     with col1:
         branches_df = read_sheet(SHEET_BRANCHES)
-        branch_opts = {"ทั้งหมด": "ทั้งหมด"}
-        if not branches_df.empty:
-            branch_opts.update(dict(zip(branches_df["branch_id"], branches_df["branch_name"])))
-        sel_branch = st.selectbox("กรองตามสาขา", options=list(branch_opts.keys()),
-                                  format_func=lambda k: branch_opts[k])
+        locked_branch_id = str(st.session_state.get("locked_branch_id", "")).strip()
+        if locked_branch_id:
+            sel_branch = branch_selector(
+                branches_df,
+                label="กรองตามสาขา",
+                key="hist_branch",
+            )
+            if sel_branch is None:
+                return
+        else:
+            branch_opts = {"ทั้งหมด": "ทั้งหมด"}
+            if not branches_df.empty:
+                branch_opts.update(dict(zip(
+                    branches_df["branch_id"].astype(str),
+                    branches_df["branch_name"].astype(str),
+                )))
+            sel_branch = st.selectbox(
+                "กรองตามสาขา",
+                options=list(branch_opts.keys()),
+                format_func=lambda k: branch_opts[k],
+                key="hist_branch",
+            )
     with col2:
         sel_date = st.date_input("กรองตามวันที่ (ว่างไว้ = ทั้งหมด)",
                                   value=None, key="hist_date")
@@ -637,7 +677,7 @@ def _render_history():
         st.info("ไม่พบรายงานตามเงื่อนไขที่เลือก")
         return
 
-    st.dataframe(df_show, use_container_width=True)
+    st.dataframe(df_show, width="stretch")
 
     # ── Recheck Summary แบบมีสี ──────────────────────────────────────
     st.subheader("🔍 สรุปการตรวจสอบยอด (Sales Recheck)")

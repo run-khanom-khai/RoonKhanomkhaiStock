@@ -1,7 +1,7 @@
 """
 hr.py  –  ระบบ HR และเงินเดือนพนักงาน (รอบที่ 6)
 """
-import io, datetime
+import io, re, datetime
 import streamlit as st
 import pandas as pd
 
@@ -13,10 +13,16 @@ from config import (
 from modules.excel_db import read_sheet, write_sheet, append_row, update_row, delete_row, init_workbook
 from utils.id_generator import next_id
 
+# สัญชาติ (ไทย = คนไทย, ที่เหลือ = ต่างด้าว)
+NATIONALITIES = ["ไทย", "พม่า", "ลาว", "เวียดนาม", "มาเลเซีย", "จีน", "อื่นๆ"]
+
 HR_SCHEMAS = {
     SHEET_EMPLOYEES: [
-        "employee_id","first_name","last_name","age","birthdate","education",
-        "position","salary","branch_id","start_date","resign_date","status",
+        "employee_id","first_name","last_name","nickname","age","birthdate","education",
+        "position","salary","branch_id","start_date","resign_date","resign_reason","status",
+        "nationality","national_id","passport_no","mou_no",
+        "email","phone",
+        "bank_name","bank_branch","bank_account_no","bank_account_name","promptpay_no",
     ],
     SHEET_PAYROLL_PERIODS: [
         "payroll_period_id","month","year","period_no",
@@ -29,6 +35,7 @@ HR_SCHEMAS = {
         "diligence_allowance","marketing_share","position_allowance","other_income",
         "leave_days","leave_deduction","late_minutes","late_deduction",
         "other_deduction","gross_income","social_security","mou_deduction","net_income",
+        "base_salary","income1","income2","income3","total_income",
     ],
     SHEET_LATE_DEDUCTION_RULES: [
         "rule_id","daily_wage","working_hours","hourly_wage",
@@ -38,18 +45,46 @@ HR_SCHEMAS = {
 
 
 def _init_hr_sheets():
+    """Lazy init — สร้าง headers เฉพาะ Sheet ที่ว่างจริงๆ"""
     init_workbook()
-    for sheet_name, columns in HR_SCHEMAS.items():
-        df = read_sheet(sheet_name)
-        if df.empty or list(df.columns) != columns:
-            write_sheet(sheet_name, pd.DataFrame(columns=columns))
+    try:
+        from gsheets_db import init_sheet_headers
+        for sheet_name, columns in HR_SCHEMAS.items():
+            init_sheet_headers(sheet_name, columns)
+    except ImportError:
+        # Local mode
+        for sheet_name, columns in HR_SCHEMAS.items():
+            df = read_sheet(sheet_name)
+            if df.empty or list(df.columns) != columns:
+                write_sheet(sheet_name, pd.DataFrame(columns=columns))
 
 
 def _branches_dict():
-    df = read_sheet(SHEET_BRANCHES)
-    if df.empty:
-        return {}
-    return dict(zip(df["branch_id"], df["branch_name"]))
+    """รายชื่อสาขา — ใช้ branch_auth (20 สาขา) เป็นหลัก + เสริมจากตาราง branches"""
+    result = {}
+    try:
+        from modules.branch_auth import BRANCH_NAMES, BRANCH_LOGIN_SEED
+        for b in BRANCH_LOGIN_SEED.keys():
+            result[b] = BRANCH_NAMES.get(b, b)
+    except Exception:
+        pass
+    try:
+        df = read_sheet(SHEET_BRANCHES)
+        if df is not None and not df.empty and "branch_id" in df.columns:
+            for _, r in df.iterrows():
+                bid = str(r.get("branch_id", "")).strip()
+                if bid and bid not in result:
+                    result[bid] = str(r.get("branch_name", "")).strip() or bid
+    except Exception:
+        pass
+    return result
+
+
+def _hr_num(v):
+    try:
+        return float(str(v).replace(",", "").strip() or 0)
+    except Exception:
+        return 0.0
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -60,7 +95,7 @@ def render():
     tab1, tab2, tab3, tab4 = st.tabs([
         "👤 จัดการพนักงาน",
         "📅 รอบจ่ายเงินเดือน",
-        "💵 คำนวณรายได้",
+        "💵 บันทึกเงินเดือนพนักงานสาขา",
         "📤 Export รายงาน",
     ])
     with tab1: _render_employees()
@@ -84,8 +119,10 @@ def _render_employees():
         df_show = df_show[mask]
 
     if not df_show.empty:
-        # เรียงชื่อ ก-ฮ
-        df_show = df_show.sort_values("first_name", ignore_index=True)
+        # เรียงตามรหัสสาขา (branch_id) แล้วตามด้วยชื่อ
+        sort_cols = [c for c in ["branch_id", "first_name"] if c in df_show.columns]
+        if sort_cols:
+            df_show = df_show.sort_values(sort_cols, ignore_index=True)
         st.dataframe(df_show, use_container_width=True)
     else:
         st.info("ยังไม่มีข้อมูลพนักงาน")
@@ -100,43 +137,184 @@ def _render_employees():
 
 
 def _form_add_employee(branches):
+    # ── auto-fill helper ─────────────────────────────────────
+    if "add_fname" not in st.session_state:
+        st.session_state["add_fname"] = ""
+    if "add_lname" not in st.session_state:
+        st.session_state["add_lname"] = ""
+
+    st.markdown("#### ➕ เพิ่มพนักงานใหม่")
+    st.caption("* = จำเป็นต้องกรอก")
+    # ── สัญชาติ (อยู่นอกฟอร์ม เพื่อให้สลับช่องบัตรได้ทันที) ──
+    nationality = st.selectbox(
+        "🌏 สัญชาติ *", NATIONALITIES, key="add_nationality",
+        help="ถ้าเป็นคนไทย จะกรอกเลขบัตรประชาชน / ถ้าเป็นต่างด้าว จะกรอก PASSPORT หรือ MOU")
+    is_thai = (nationality == "ไทย")
+
     with st.form("form_add_emp"):
-        st.markdown("#### เพิ่มพนักงานใหม่")
+        # ── ส่วนที่ 1: ข้อมูลส่วนตัว ─────────────────────────
+        st.markdown("**👤 ข้อมูลส่วนตัว**")
         c1, c2, c3 = st.columns(3)
         with c1:
-            first_name  = st.text_input("ชื่อ *")
-            last_name   = st.text_input("นามสกุล *")
-            age         = st.number_input("อายุ", min_value=15, max_value=70, step=1)
-            birthdate   = st.date_input("วันเกิด")
+            first_name = st.text_input("ชื่อ *", key="add_fn")
+            last_name  = st.text_input("นามสกุล *", key="add_ln")
+            nickname   = st.text_input("ชื่อเล่น", key="add_nick")
+            birthdate  = st.date_input(
+                "วันเกิด *",
+                min_value=datetime.date(1980, 1, 1),
+                max_value=datetime.date.today(),
+                value=datetime.date(1990, 1, 1),
+                help="ระบบจะคำนวณอายุจากวันเกิดอัตโนมัติ"
+            )
+            # คำนวณอายุอัตโนมัติจากวันเกิด
+            today = datetime.date.today()
+            age = today.year - birthdate.year - (
+                (today.month, today.day) < (birthdate.month, birthdate.day)
+            )
+            st.info(f"🎂 อายุ: **{age} ปี** (คำนวณจากวันเกิดอัตโนมัติ)")
         with c2:
-            education   = st.text_input("การศึกษา")
-            position    = st.selectbox("ตำแหน่ง", POSITIONS)
-            salary      = st.number_input("เงินเดือน / ค่าแรงรายวัน (บาท)",
-                                          min_value=0.0, step=50.0)
+            email = st.text_input("e-mail", placeholder="example@email.com")
+            phone = st.text_input("เบอร์โทรศัพท์ *",
+                                   placeholder="0812345678",
+                                   help="กรอกตัวเลขเท่านั้น ไม่ต้องใส่เครื่องหมาย")
+            education = st.text_input("การศึกษา")
         with c3:
+            position   = st.selectbox("ตำแหน่ง", POSITIONS, key="add_position")
+            salary     = st.number_input("เงินเดือน / ค่าแรงรายวัน (บาท)",
+                                          min_value=0.0, step=50.0)
             branch_opts = list(branches.keys()) if branches else []
-            branch_id   = st.selectbox("สาขา",
-                                        [""] + branch_opts,
-                                        format_func=lambda k: branches.get(k, "– ไม่ระบุ –") if k else "– ไม่ระบุ –")
-            start_date  = st.date_input("วันเริ่มงาน")
-            status      = st.selectbox("สถานะ", EMPLOYEE_STATUSES)
+            branch_id   = st.selectbox(
+                "สาขา * (รหัส – ชื่อสาขา)",
+                [""] + branch_opts,
+                format_func=lambda k: f"{k} – {branches.get(k,'')}" if k else "– กรุณาเลือกสาขา –",
+                help="เลือกสาขาให้ตรงกับสาขาในระบบเงินสดย่อย",
+                key="add_branch_id"
+            )
+            if branch_id:
+                st.caption(f"✅ สาขาที่เลือก: {branch_id} – {branches.get(branch_id,'')}")
+            start_date = st.date_input("วันเริ่มงาน")
+            status     = st.selectbox("สถานะ", EMPLOYEE_STATUSES, key="add_status")
 
-        saved = st.form_submit_button("💾 บันทึก", type="primary")
+        st.divider()
+
+        # ── ส่วนบัตร / สัญชาติ ────────────────────────────────
+        st.markdown(f"**🪪 ข้อมูลบัตร (สัญชาติ: {nationality})**")
+        national_id = passport_no = mou_no = ""
+        if is_thai:
+            national_id = st.text_input("เลขที่บัตรประชาชน (13 หลัก)", key="add_natid")
+        else:
+            k1, k2 = st.columns(2)
+            with k1:
+                passport_no = st.text_input("เลขที่ PASSPORT", key="add_passport")
+            with k2:
+                mou_no = st.text_input("เลขที่บัตร MOU", key="add_mou")
+            st.caption("กรอกอย่างน้อย 1 ช่อง (PASSPORT หรือ MOU)")
+
+        st.divider()
+
+        # ── ส่วนที่ 2: ข้อมูลธนาคาร ──────────────────────────
+        st.markdown("**🏦 ข้อมูลธนาคาร**")
+        st.caption("ต้องมีอย่างน้อย เลขที่บัญชี หรือ PromptPay")
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            bank_name   = st.text_input("ชื่อธนาคาร")
+            bank_branch = st.text_input("สาขาธนาคาร")
+        with b2:
+            bank_account_no   = st.text_input("เลขที่บัญชี")
+            bank_account_name = st.text_input(
+                "ชื่อบัญชีธนาคาร *",
+                placeholder="ใส่ชื่อ-นามสกุล เจ้าของบัญชี",
+                help="โดยทั่วไปตรงกับชื่อพนักงาน"
+            )
+        with b3:
+            promptpay_no = st.text_input(
+                "หมายเลข PromptPay (ถ้ามี)",
+                placeholder="เบอร์โทร หรือ เลขบัตรประชาชน"
+            )
+
+        saved = st.form_submit_button("💾 บันทึกพนักงาน", type="primary",
+                                       use_container_width=True)
+
     if saved:
-        if not first_name.strip() or not last_name.strip():
-            st.error("กรุณากรอกชื่อและนามสกุล")
+        # ── Validation ────────────────────────────────────────
+        errors = []
+        fn = first_name.strip()
+        ln = last_name.strip()
+
+        if not fn or not ln:
+            errors.append("กรุณากรอกชื่อและนามสกุล")
+
+        # ตรวจพนักงานซ้ำ (ชื่อ+นามสกุล+สาขาเดียวกัน)
+        df_check = read_sheet(SHEET_EMPLOYEES)
+        if not df_check.empty and not errors:
+            dup = df_check[
+                (df_check["first_name"].astype(str).str.strip() == fn.strip()) &
+                (df_check["last_name"].astype(str).str.strip() == ln.strip()) &
+                (df_check["branch_id"].astype(str).str.strip() == str(branch_id).strip()) &
+                (df_check["status"].astype(str) != "resigned")
+            ]
+            if not dup.empty:
+                errors.append(
+                    f"มีข้อมูลพนักงาน '{fn} {ln}' ของสาขานี้แล้วครับ "
+                    f"(ID: {dup.iloc[0]['employee_id']}) — ไม่ต้องเพิ่มซ้ำครับ"
+                )
+        if not branch_id:
+            errors.append("กรุณาเลือกสาขา")
+        if not phone.strip():
+            errors.append("กรุณากรอกเบอร์โทรศัพท์")
+        elif not re.match(r"^[0-9+\-\s]{8,15}$", phone.strip()):
+            errors.append("เบอร์โทรศัพท์ต้องเป็นตัวเลข 8-15 หลัก")
+        if email.strip() and not re.match(r"^[\w\.\-]+@[\w\.\-]+\.\w{2,}$", email.strip()):
+            errors.append("รูปแบบ e-mail ไม่ถูกต้อง เช่น example@email.com")
+        # birthdate ถูกจำกัดด้วย min_value/max_value แล้ว
+        # ตรวจอายุต้องไม่น้อยกว่า 15 ปี
+        if age < 15:
+            errors.append("อายุพนักงานต้องไม่น้อยกว่า 15 ปี")
+        if not bank_account_no.strip() and not promptpay_no.strip():
+            errors.append("ต้องมีอย่างน้อย เลขที่บัญชี หรือ หมายเลข PromptPay")
+        if bank_account_no.strip() and not bank_account_name.strip():
+            errors.append("กรุณากรอกชื่อบัญชีธนาคาร (bank_account_name)")
+
+        if errors:
+            for e in errors:
+                st.error(f"❌ {e}")
             return
-        df = read_sheet(SHEET_EMPLOYEES)
+
+        # ── auto-fill bank_account_name ถ้าว่าง ──────────────
+        final_acc_name = bank_account_name.strip() or f"{fn} {ln}"
+
+        df     = read_sheet(SHEET_EMPLOYEES)
         emp_id = next_id(df, "employee_id", "EMP")
         append_row(SHEET_EMPLOYEES, {
-            "employee_id": emp_id, "first_name": first_name.strip(),
-            "last_name": last_name.strip(), "age": age,
-            "birthdate": str(birthdate), "education": education,
-            "position": position, "salary": salary,
-            "branch_id": branch_id, "start_date": str(start_date),
-            "resign_date": "", "status": status,
+            "employee_id":      emp_id,
+            "first_name":       fn,
+            "last_name":        ln,
+            "nickname":         nickname.strip(),
+            "age":              age,
+            "birthdate":        str(birthdate),
+            "education":        education.strip(),
+            "position":         position,
+            "salary":           salary,
+            "branch_id":        branch_id,
+            "start_date":       str(start_date),
+            "resign_date":      "",
+            "status":           status,
+            "nationality":      nationality,
+            "national_id":      national_id.strip(),
+            "passport_no":      passport_no.strip(),
+            "mou_no":           mou_no.strip(),
+            "email":            email.strip(),
+            "phone":            phone.strip(),
+            "bank_name":        bank_name.strip(),
+            "bank_branch":      bank_branch.strip(),
+            "bank_account_no":  bank_account_no.strip(),
+            "bank_account_name": final_acc_name,
+            "promptpay_no":     promptpay_no.strip(),
         })
-        st.success(f"✅ เพิ่มพนักงาน {first_name} {last_name} สำเร็จ (ID: {emp_id})")
+        st.success(
+            f"✅ เพิ่มพนักงาน **{fn} {ln}** สำเร็จ (ID: {emp_id}) | "
+            f"สาขา: {branches.get(branch_id, branch_id)}"
+        )
         st.rerun()
 
 
@@ -149,32 +327,77 @@ def _form_edit_employee(df, branches):
                        format_func=lambda x: f"{x} – {df[df['employee_id']==x]['first_name'].values[0]} {df[df['employee_id']==x]['last_name'].values[0]}")
     row = df[df["employee_id"] == sel].iloc[0]
 
+    # ── สัญชาติ (นอกฟอร์ม เพื่อสลับช่องบัตรได้ทันที) ──
+    _cur_nat = row.get("nationality", "ไทย")
+    _nat_idx = NATIONALITIES.index(_cur_nat) if _cur_nat in NATIONALITIES else 0
+    nationality = st.selectbox("🌏 สัญชาติ", NATIONALITIES, index=_nat_idx,
+                               key=f"edit_nat_{sel}")
+    is_thai = (nationality == "ไทย")
+
     with st.form("form_edit_emp"):
         c1, c2, c3 = st.columns(3)
         with c1:
             first_name = st.text_input("ชื่อ", value=row.get("first_name",""))
             last_name  = st.text_input("นามสกุล", value=row.get("last_name",""))
-            try: age_v = int(float(row.get("age",18)))
-            except: age_v = 18
-            age = st.number_input("อายุ", min_value=15, max_value=70, step=1, value=age_v)
+            nickname   = st.text_input("ชื่อเล่น", value=row.get("nickname",""))
+            try:
+                bd_val = datetime.date.fromisoformat(str(row.get("birthdate","1990-01-01")))
+            except:
+                bd_val = datetime.date(1990, 1, 1)
+            birthdate = st.date_input(
+                "วันเกิด *", value=bd_val,
+                min_value=datetime.date(1980, 1, 1),
+                max_value=datetime.date.today(),
+                help="ระบบจะคำนวณอายุจากวันเกิดอัตโนมัติ"
+            )
+            # คำนวณอายุอัตโนมัติจากวันเกิด
+            today_e = datetime.date.today()
+            age = today_e.year - birthdate.year - (
+                (today_e.month, today_e.day) < (birthdate.month, birthdate.day)
+            )
+            st.info(f"🎂 อายุ: **{age} ปี** (คำนวณจากวันเกิดอัตโนมัติ)")
+            email = st.text_input("Email", value=row.get("email",""))
+            phone = st.text_input("เบอร์โทรศัพท์", value=row.get("phone",""))
         with c2:
             education = st.text_input("การศึกษา", value=row.get("education",""))
             pos_idx   = POSITIONS.index(row.get("position",POSITIONS[0])) if row.get("position") in POSITIONS else 0
-            position  = st.selectbox("ตำแหน่ง", POSITIONS, index=pos_idx)
+            position  = st.selectbox("ตำแหน่ง", POSITIONS, index=pos_idx, key="edit_position")
             try: sal_v = float(row.get("salary",0))
             except: sal_v = 0.0
             salary = st.number_input("เงินเดือน", min_value=0.0, step=50.0, value=sal_v)
+            st.markdown("**ข้อมูลธนาคาร**")
+            bank_name   = st.text_input("ชื่อธนาคาร",   value=row.get("bank_name",""))
+            bank_branch = st.text_input("สาขาธนาคาร", value=row.get("bank_branch",""))
         with c3:
+            bank_account_no   = st.text_input("เลขที่บัญชี",     value=row.get("bank_account_no",""))
+            bank_account_name = st.text_input("ชื่อบัญชีธนาคาร", value=row.get("bank_account_name",""))
+            promptpay_no      = st.text_input("PromptPay",        value=row.get("promptpay_no",""))
             branch_opts = list(branches.keys()) if branches else []
             all_br = [""] + branch_opts
             cur_br = row.get("branch_id","")
             br_idx = all_br.index(cur_br) if cur_br in all_br else 0
             branch_id  = st.selectbox("สาขา", all_br, index=br_idx,
-                                       format_func=lambda k: branches.get(k,"– ไม่ระบุ –") if k else "– ไม่ระบุ –")
+                                       format_func=lambda k: f"{k} – {branches.get(k,'')}" if k else "– ไม่ระบุ –",
+                                       key="edit_branch_id")
             st_opts = EMPLOYEE_STATUSES
             st_idx  = st_opts.index(row.get("status","active")) if row.get("status") in st_opts else 0
-            status  = st.selectbox("สถานะ", st_opts, index=st_idx)
+            status  = st.selectbox("สถานะ", st_opts, index=st_idx, key="edit_status")
             resign_date = st.text_input("วันลาออก (ว่าง = ยังทำงาน)", value=row.get("resign_date",""))
+            resign_reason = st.text_input("เหตุผลที่ลาออก", value=row.get("resign_reason",""),
+                                          help="กรอกเมื่อพนักงานลาออก")
+
+        # ── ข้อมูลบัตร / สัญชาติ ──
+        st.markdown(f"**🪪 ข้อมูลบัตร (สัญชาติ: {nationality})**")
+        national_id = passport_no = mou_no = ""
+        if is_thai:
+            national_id = st.text_input("เลขที่บัตรประชาชน (13 หลัก)",
+                                        value=row.get("national_id",""))
+        else:
+            k1, k2 = st.columns(2)
+            with k1:
+                passport_no = st.text_input("เลขที่ PASSPORT", value=row.get("passport_no",""))
+            with k2:
+                mou_no = st.text_input("เลขที่บัตร MOU", value=row.get("mou_no",""))
 
         cs, cd = st.columns(2)
         with cs: save = st.form_submit_button("💾 บันทึก", type="primary")
@@ -182,9 +405,19 @@ def _form_edit_employee(df, branches):
 
     if save:
         update_row(SHEET_EMPLOYEES, "employee_id", sel, {
-            "first_name": first_name, "last_name": last_name, "age": age,
-            "education": education, "position": position, "salary": salary,
+            "first_name": first_name, "last_name": last_name,
+            "nickname": nickname, "age": age,
+            "birthdate": str(birthdate), "education": education,
+            "position": position, "salary": salary,
             "branch_id": branch_id, "status": status, "resign_date": resign_date,
+            "resign_reason": resign_reason,
+            "nationality": nationality, "national_id": national_id,
+            "passport_no": passport_no, "mou_no": mou_no,
+            "email": email, "phone": phone,
+            "bank_name": bank_name, "bank_branch": bank_branch,
+            "bank_account_no": bank_account_no,
+            "bank_account_name": bank_account_name,
+            "promptpay_no": promptpay_no,
         })
         st.success("✅ แก้ไขสำเร็จ"); st.rerun()
     if delete:
@@ -235,114 +468,120 @@ def _render_payroll_periods():
 
 
 # ══════════════════════════════════════════════════════════════════════
-# TAB 3 : คำนวณรายได้
+# TAB 3 : บันทึกเงินเดือนพนักงานสาขา
 # ══════════════════════════════════════════════════════════════════════
+def _pp_label(pp_df, k):
+    r = pp_df[pp_df["payroll_period_id"].astype(str) == str(k)]
+    if r.empty:
+        return str(k)
+    r = r.iloc[0]
+    return (f"เดือน {r.get('month','')}/{r.get('year','')} "
+            f"รอบ {r.get('period_no','')} (จ่าย {r.get('pay_date','')})")
+
+
 def _render_payroll_calc():
-    st.subheader("💵 คำนวณรายได้พนักงาน")
+    st.subheader("💵 บันทึกเงินเดือนพนักงานสาขา")
+    st.caption("เลือกสาขา + รอบจ่าย → เลือกพนักงาน → กรอกเงินเดือนและรายได้ ระบบรวมยอดให้ก่อนบันทึก")
 
     emp_df = read_sheet(SHEET_EMPLOYEES)
     pp_df  = read_sheet(SHEET_PAYROLL_PERIODS)
-
+    branches = _branches_dict()
     if emp_df.empty:
-        st.warning("ยังไม่มีพนักงาน")
+        st.warning("ยังไม่มีพนักงาน — เพิ่มที่แท็บ 'จัดการพนักงาน' ก่อน")
         return
     if pp_df.empty:
-        st.warning("ยังไม่มีรอบจ่ายเงิน — กรุณาสร้างรอบก่อน")
+        st.warning("ยังไม่มีรอบจ่ายเงินเดือน — สร้างที่แท็บ 'รอบจ่ายเงินเดือน' ก่อน (ให้มีทั้ง 2 รอบ)")
         return
 
+    # ── ① สาขา + รอบจ่าย (แสดงทั้ง 2 รอบให้เลือก) ──
     c1, c2 = st.columns(2)
     with c1:
-        pp_ids = pp_df["payroll_period_id"].tolist()
-        sel_pp = st.selectbox("เลือกรอบจ่าย",pp_ids,
-                              format_func=lambda k: f"{k} – เดือน {pp_df[pp_df['payroll_period_id']==k]['month'].values[0]}/{pp_df[pp_df['payroll_period_id']==k]['year'].values[0]} รอบ{pp_df[pp_df['payroll_period_id']==k]['period_no'].values[0]}")
+        br_ids = sorted(emp_df["branch_id"].astype(str).str.strip().unique().tolist()) \
+            if "branch_id" in emp_df.columns else list(branches.keys())
+        sel_branch = st.selectbox("🏪 สาขา", br_ids,
+                                  format_func=lambda k: f"{k} – {branches.get(k, '')}",
+                                  key="sal_branch")
     with c2:
-        active_emp = emp_df[emp_df["status"].astype(str)=="active"] if "status" in emp_df.columns else emp_df
-        if active_emp.empty:
-            st.warning("ไม่มีพนักงาน active")
-            return
-        emp_opts = active_emp["employee_id"].tolist()
-        sel_emp  = st.selectbox("เลือกพนักงาน", emp_opts,
-                                format_func=lambda k: f"{k} – {active_emp[active_emp['employee_id']==k]['first_name'].values[0]} {active_emp[active_emp['employee_id']==k]['last_name'].values[0]}")
+        pp_ids = pp_df["payroll_period_id"].astype(str).tolist()
+        sel_pp = st.selectbox("📅 รอบจ่าย", pp_ids,
+                              format_func=lambda k: _pp_label(pp_df, k), key="sal_pp")
 
-    emp_row = emp_df[emp_df["employee_id"]==sel_emp].iloc[0]
-    try: daily_rate = float(emp_row.get("salary", 0))
-    except: daily_rate = 0.0
+    # ── ② พนักงานของสาขานั้น ──
+    be = emp_df[emp_df["branch_id"].astype(str).str.strip() == str(sel_branch)]
+    if "status" in be.columns:
+        be = be[be["status"].astype(str).str.lower() != "resigned"]
+    if be.empty:
+        st.warning("ไม่มีพนักงานของสาขานี้")
+        return
+    emp_opts = be["employee_id"].astype(str).tolist()
+    sel_emp = st.selectbox(
+        "👤 ชื่อพนักงาน", emp_opts,
+        format_func=lambda k: f"{be[be['employee_id'].astype(str)==k]['first_name'].values[0]} "
+                              f"{be[be['employee_id'].astype(str)==k]['last_name'].values[0]}",
+        key="sal_emp")
+    emp_row = be[be["employee_id"].astype(str) == sel_emp].iloc[0]
+    base_default = _hr_num(emp_row.get("salary", 0))
 
-    st.info(f"พนักงาน: {emp_row.get('first_name','')} {emp_row.get('last_name','')} | ตำแหน่ง: {emp_row.get('position','')} | ค่าแรง: ฿{daily_rate:,.2f}/วัน")
-
-    with st.form("form_payroll_calc"):
-        st.markdown("#### ① วันทำงาน")
-        c1, c2, c3 = st.columns(3)
+    # ── ③ กรอกเงินเดือน + รายได้ 1/2/3 ──
+    with st.form("form_salary"):
+        st.markdown("#### กรอกเงินเดือนและรายได้")
+        c1, c2 = st.columns(2)
         with c1:
-            normal_days       = st.number_input("วันทำงานปกติ",    min_value=0, step=1)
-            normal_rate       = st.number_input("อัตราต่อวัน (ปกติ)",  min_value=0.0, step=50.0, value=daily_rate)
+            base_salary = st.number_input("เงินเดือน (บาท)", min_value=0.0, step=100.0,
+                                          value=base_default)
+            income1 = st.number_input("รายได้ 1 (บาท)", min_value=0.0, step=50.0)
         with c2:
-            double_shift_days = st.number_input("วันทำงาน 2 กะ",   min_value=0, step=1)
-            double_shift_rate = st.number_input("อัตรา (2 กะ)",     min_value=0.0, step=50.0)
-        with c3:
-            holiday_days      = st.number_input("วันหยุดที่ทำงาน", min_value=0, step=1)
-            holiday_rate      = st.number_input("อัตรา (วันหยุด)", min_value=0.0, step=50.0)
-
-        st.markdown("#### ② เบี้ยต่าง ๆ")
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: diligence_allowance = st.number_input("เบี้ยขยัน",     min_value=0.0, step=50.0)
-        with c2: marketing_share     = st.number_input("ส่วนแบ่งการตลาด", min_value=0.0, step=50.0)
-        with c3: position_allowance  = st.number_input("ค่าตำแหน่ง",    min_value=0.0, step=50.0)
-        with c4: other_income        = st.number_input("รายได้อื่น ๆ",   min_value=0.0, step=50.0)
-
-        st.markdown("#### ③ หัก")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            leave_days      = st.number_input("วันลา",             min_value=0, step=1)
-        with c2:
-            late_minutes    = st.number_input("นาทีมาสาย",         min_value=0, step=1)
-        with c3:
-            other_deduction = st.number_input("หักอื่น ๆ",         min_value=0.0, step=50.0)
-        mou_deduction = st.number_input("MOU / เงินกู้ยืม (หัก)", min_value=0.0, step=50.0)
-
-        # คำนวณ
-        wage_total      = (normal_days*normal_rate + double_shift_days*double_shift_rate + holiday_days*holiday_rate)
-        leave_deduction = normal_rate * leave_days
-        minute_wage     = (normal_rate / 8 / 60) if normal_rate > 0 else 0
-        late_deduction  = minute_wage * late_minutes
-        gross_income    = (wage_total + diligence_allowance + marketing_share +
-                           position_allowance + other_income -
-                           leave_deduction - late_deduction - other_deduction)
-        social_security = round((gross_income * 0.03) / 2, 2)
-        net_income      = gross_income - social_security - mou_deduction
-
-        st.markdown("#### ④ สรุปรายได้")
-        c1,c2,c3,c4 = st.columns(4)
-        c1.metric("ค่าแรงรวม",    f"฿{wage_total:,.2f}")
-        c2.metric("รายได้รวม",    f"฿{gross_income:,.2f}")
-        c3.metric("ประกันสังคม",  f"฿{social_security:,.2f}")
-        c4.metric("💰 รายได้สุทธิ", f"฿{net_income:,.2f}")
-
-        submitted = st.form_submit_button("💾 บันทึกรายได้", type="primary")
+            income2 = st.number_input("รายได้ 2 (บาท)", min_value=0.0, step=50.0)
+            income3 = st.number_input("รายได้ 3 (บาท)", min_value=0.0, step=50.0)
+        total_income = base_salary + income1 + income2 + income3
+        st.markdown(
+            f"<div style='background:#E8F5E9;border:2px solid #2E7D32;border-radius:8px;"
+            f"padding:12px;text-align:center;'>"
+            f"<span style='color:#1B5E20;'>รายได้ทั้งหมด (คำนวณอัตโนมัติ)</span><br>"
+            f"<b style='color:#1B5E20;font-size:1.8rem;'>฿{total_income:,.2f}</b></div>",
+            unsafe_allow_html=True)
+        submitted = st.form_submit_button("💾 ยืนยันบันทึกเงินเดือน", type="primary")
 
     if submitted:
-        pr_df  = read_sheet(SHEET_PAYROLL_RECORDS)
-        pr_id  = next_id(pr_df, "payroll_id", "PAY")
+        pr_df = read_sheet(SHEET_PAYROLL_RECORDS)
+        pr_id = next_id(pr_df, "payroll_id", "PAY")
         append_row(SHEET_PAYROLL_RECORDS, {
-            "payroll_id": pr_id, "payroll_period_id": sel_pp,
-            "employee_id": sel_emp,
-            "normal_days": normal_days, "normal_rate": normal_rate,
-            "double_shift_days": double_shift_days, "double_shift_rate": double_shift_rate,
-            "holiday_days": holiday_days, "holiday_rate": holiday_rate,
-            "wage_total": round(wage_total,2),
-            "diligence_allowance": diligence_allowance,
-            "marketing_share": marketing_share,
-            "position_allowance": position_allowance,
-            "other_income": other_income,
-            "leave_days": leave_days, "leave_deduction": round(leave_deduction,2),
-            "late_minutes": late_minutes, "late_deduction": round(late_deduction,2),
-            "other_deduction": other_deduction,
-            "gross_income": round(gross_income,2),
-            "social_security": social_security,
-            "mou_deduction": mou_deduction,
-            "net_income": round(net_income,2),
+            "payroll_id": pr_id, "payroll_period_id": sel_pp, "employee_id": sel_emp,
+            "base_salary": base_salary, "income1": income1, "income2": income2,
+            "income3": income3, "total_income": round(total_income, 2),
+            "wage_total": base_salary, "gross_income": round(total_income, 2),
+            "net_income": round(total_income, 2),
         })
-        st.success(f"✅ บันทึกรายได้ {pr_id} สำเร็จ | รายได้สุทธิ ฿{net_income:,.2f}")
+        st.success(f"✅ บันทึกเงินเดือนสำเร็จ ({pr_id}) | รายได้ทั้งหมด ฿{total_income:,.2f}")
+        st.rerun()
+
+    # ── รายงานเงินเดือนทั้งหมด (เลือกรอบ) ──
+    st.divider()
+    st.markdown("#### 📋 รายงานเงินเดือน (เลือกรอบ)")
+    rep_pp = st.selectbox("เลือกรอบเพื่อดูรายงาน", ["ทั้งหมด"] + pp_ids,
+                          format_func=lambda k: k if k == "ทั้งหมด" else _pp_label(pp_df, k),
+                          key="sal_report_pp")
+    pr = read_sheet(SHEET_PAYROLL_RECORDS)
+    if pr is None or pr.empty:
+        st.info("ยังไม่มีข้อมูลเงินเดือน")
+        return
+    if rep_pp != "ทั้งหมด":
+        pr = pr[pr["payroll_period_id"].astype(str) == rep_pp]
+    emap = {}
+    for _, e in emp_df.iterrows():
+        emap[str(e["employee_id"])] = (str(e.get("first_name", "")) + " " +
+                                       str(e.get("last_name", ""))).strip()
+    bmap = {}
+    for _, e in emp_df.iterrows():
+        bmap[str(e["employee_id"])] = str(e.get("branch_id", ""))
+    disp = pd.DataFrame({
+        "พนักงาน": pr["employee_id"].astype(str).map(emap).fillna(pr["employee_id"]),
+        "สาขา": pr["employee_id"].astype(str).map(bmap).map(lambda b: f"{b} – {branches.get(b, '')}"),
+        "เงินเดือน": pr.get("base_salary", "").map(lambda x: f"{_hr_num(x):,.2f}"),
+        "รายได้ทั้งหมด": pr.get("total_income", pr.get("net_income", "")).map(lambda x: f"{_hr_num(x):,.2f}"),
+    })
+    st.dataframe(disp, use_container_width=True, hide_index=True)
+    st.metric("รวมจ่ายทั้งหมด", f"฿{pr.get('total_income', pr.get('net_income', 0)).map(_hr_num).sum():,.2f}")
 
 
 # ══════════════════════════════════════════════════════════════════════

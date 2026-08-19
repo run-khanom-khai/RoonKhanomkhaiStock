@@ -31,17 +31,17 @@ def _seed_if_empty(sheet_name: str, columns: list, rows: list):
 
 
 def _seed_branch_groups():
+    # กลุ่มสาขา (id = ชื่อ เพื่อให้ตรงกับค่าที่เก็บใน branches)
     data = [
-        ("01", "ครัวกลาง", "TRUE"),
-        ("02", "Central", "TRUE"),
-        ("03", "The Mall", "TRUE"),
-        ("04", "Seacon", "TRUE"),
-        ("05", "Department Store", "TRUE"),
-        ("06", "Event", "TRUE"),
-        ("07", "Online", "TRUE"),
-        ("08", "Market", "TRUE"),
-        ("09", "Delivery", "TRUE"),
-        ("10", "Modern Trade", "TRUE"),
+        ("Central", "Central", "TRUE"),
+        ("The Mall", "The Mall", "TRUE"),
+        ("Seacon", "Seacon", "TRUE"),
+        ("Market", "Market", "TRUE"),
+        ("Delivery", "Delivery", "TRUE"),
+        ("Online", "Online", "TRUE"),
+        ("Event", "Event", "TRUE"),
+        ("DepartmentStore", "DepartmentStore", "TRUE"),
+        ("Shopping Mall", "Shopping Mall", "TRUE"),
     ]
     _seed_if_empty(SHEET_BRANCH_GROUPS,
                    ["branch_group_id", "branch_group_name", "is_active"], data)
@@ -125,6 +125,21 @@ def render_master_data():
         _render_reference_tables()
 
 
+def render_master_data_accounting():
+    """Master Data สำหรับฝ่ายบัญชี — เฉพาะ สาขา + สินค้าสำเร็จรูป
+    (วัตถุดิบ/บรรจุภัณฑ์ ย้ายไปฝ่าย Stock แล้ว, ดูข้อมูลอ้างอิงย้ายไป app หลัก)
+    """
+    st.title("📋 Master Data")
+    tab_branch, tab_product = st.tabs([
+        "🏪 สาขา (Branches)",
+        "🥚 สินค้าสำเร็จรูป (Products)",
+    ])
+    with tab_branch:
+        _render_branches()
+    with tab_product:
+        _render_products()
+
+
 # ──────────────────────────────────────────────
 # BRANCHES
 # ──────────────────────────────────────────────
@@ -149,12 +164,14 @@ def _render_branches():
     if df_show.empty:
         st.info("ยังไม่มีข้อมูลสาขา")
     else:
-        # แสดงตาราง
+        # แสดงตาราง — เก็บ branch_group_id ไว้ (ตัดคอลัมน์ชื่อ 'กลุ่มสาขา' ที่ซ้ำออก)
         display = df_show.copy()
-        if "branch_group_id" in display.columns:
-            display["กลุ่มสาขา"] = display["branch_group_id"].map(bg_options).fillna(display["branch_group_id"])
         if "area_id" in display.columns:
             display["พื้นที่"] = display["area_id"].map(area_options).fillna(display["area_id"])
+        # ตัดคอลัมน์ที่ซ้ำ/ไม่ต้องการ: ชื่อสาขา (ซ้ำ branch_name), กลุ่มสาขา (ซ้ำ branch_group_id),
+        #                              area_id (ซ้ำพื้นที่), remark
+        display = display.drop(columns=[c for c in ["ชื่อสาขา", "กลุ่มสาขา", "area_id", "remark"]
+                                        if c in display.columns])
         st.dataframe(display, use_container_width=True)
 
     st.divider()
@@ -169,42 +186,71 @@ def _render_branches():
         _form_edit_branch(df, bg_options, area_options)
 
 
-def _form_add_branch(bg_options, area_options):
-    with st.form("form_add_branch"):
-        st.markdown("#### เพิ่มสาขาใหม่")
-        col1, col2 = st.columns(2)
-        with col1:
-            branch_name = st.text_input("ชื่อสาขา *")
-            bg_label = st.selectbox("กลุ่มสาขา *",
-                                    options=list(bg_options.keys()),
-                                    format_func=lambda k: f"{k} – {bg_options[k]}")
-            open_date = st.date_input("วันที่เปิด")
-        with col2:
-            area_label = st.selectbox("พื้นที่ *",
-                                      options=list(area_options.keys()),
-                                      format_func=lambda k: f"{k} – {area_options[k]}")
-            status = st.selectbox("สถานะ", ["active", "inactive", "temporary_close"])
-            remark = st.text_input("หมายเหตุ")
+def _find_bank_by_accountno(acc_no):
+    """ค้นหาบัญชีธนาคารจาก 'เลขที่บัญชี' (key seek) — คืน dict หรือ None"""
+    try:
+        from config import SHEET_BANK_ACCOUNTS
+        df = read_sheet(SHEET_BANK_ACCOUNTS)
+    except Exception:
+        return None
+    if df is None or df.empty or "account_no" not in df.columns:
+        return None
+    m = df[df["account_no"].astype(str).str.strip() == str(acc_no).strip()]
+    return m.iloc[-1].to_dict() if not m.empty else None
 
-        submitted = st.form_submit_button("💾 บันทึก", type="primary")
-        if submitted:
-            if not branch_name.strip():
-                st.error("กรุณากรอกชื่อสาขา")
-                return
-            df = read_sheet(SHEET_BRANCHES)
-            new_id = next_id(df, "branch_id", "BR")
-            row = {
-                "branch_id": new_id,
-                "branch_name": branch_name.strip(),
-                "branch_group_id": bg_label,
-                "area_id": area_label,
-                "open_date": str(open_date),
-                "status": status,
-                "remark": remark,
-            }
-            append_row(SHEET_BRANCHES, row)
-            st.success(f"✅ เพิ่มสาขา '{branch_name}' สำเร็จ (ID: {new_id})")
-            st.rerun()
+
+def _form_add_branch(bg_options, area_options):
+    # ใช้ widget สด เพื่อให้ตรวจสอบเลขที่บัญชีธนาคารได้ทันทีก่อนบันทึก
+    st.markdown("#### เพิ่มสาขาใหม่")
+    col1, col2 = st.columns(2)
+    with col1:
+        branch_name = st.text_input("ชื่อสาขา *", key="ab_name")
+        bg_label = st.selectbox("กลุ่มสาขา *", options=list(bg_options.keys()),
+                                format_func=lambda k: f"{k} – {bg_options[k]}", key="ab_bg")
+        open_date = st.date_input("วันที่เปิด", key="ab_date")
+    with col2:
+        area_label = st.selectbox("พื้นที่ *", options=list(area_options.keys()),
+                                  format_func=lambda k: f"{k} – {area_options[k]}", key="ab_area")
+        status = st.selectbox("สถานะ", ["active", "inactive", "temporary_close"], key="ab_status")
+        bank_no = st.text_input("🏦 รับเงินด้วยธนาคาร (ใส่เลขที่บัญชี)", key="ab_bank",
+                                help="ใส่เฉพาะเลขที่บัญชี ระบบจะตรวจว่ามีสมุดบัญชีเลขนี้หรือไม่")
+
+    # ── ตรวจสอบเลขที่บัญชีธนาคาร (key seek) ──
+    bank_ok = True
+    if bank_no.strip():
+        info = _find_bank_by_accountno(bank_no.strip())
+        if info is None:
+            st.warning("❌ ไม่มีสมุดบัญชีเลขที่นี้ในระบบ — เพิ่มบัญชีที่เมนู "
+                       "'การเงินและบัญชี → บัญชีธนาคาร' ก่อน")
+            bank_ok = False
+        else:
+            st.success(
+                f"✅ พบบัญชี: **{info.get('bank_name','') or '-'}** "
+                f"สาขา {info.get('bank_branch','') or '-'} · "
+                f"เลขที่ {info.get('account_no','')} · "
+                f"ชื่อบัญชี {info.get('account_name','') or '-'}")
+
+    if st.button("💾 บันทึก", type="primary", key="ab_save"):
+        if not branch_name.strip():
+            st.error("กรุณากรอกชื่อสาขา")
+            return
+        if bank_no.strip() and not bank_ok:
+            st.error("เลขที่บัญชีธนาคารยังไม่มีในระบบ — กรุณาตรวจสอบอีกครั้ง")
+            return
+        df = read_sheet(SHEET_BRANCHES)
+        new_id = next_id(df, "branch_id", "BR")
+        append_row(SHEET_BRANCHES, {
+            "branch_id": new_id,
+            "branch_name": branch_name.strip(),
+            "branch_group_id": bg_label,
+            "area_id": area_label,
+            "open_date": str(open_date),
+            "status": status,
+            "bank_account_no": bank_no.strip(),
+        })
+        st.success(f"✅ เพิ่มสาขา '{branch_name}' สำเร็จ (ID: {new_id})"
+                   + (f" · ผูกบัญชีรับเงินเลขที่ {bank_no.strip()}" if bank_no.strip() else ""))
+        st.rerun()
 
 
 def _form_edit_branch(df, bg_options, area_options):
