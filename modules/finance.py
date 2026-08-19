@@ -103,20 +103,19 @@ def render():
 
 
 def render_accounting():
-    """Finance & Accounting สำหรับฝ่ายบัญชี — ตัดเมนู 'ยอดขายฝ่ายบัญชี' ออก + เพิ่ม 'คูปอง'"""
+    """Finance & Accounting สำหรับฝ่ายบัญชี
+    (รอบ 3: ย้ายเมนู 'คูปอง' ไปที่แอป Sale Audit แล้ว)"""
     _init_fin_sheets()
     st.title("💰 การเงินและบัญชี (Finance & Accounting)")
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3 = st.tabs([
         "🏦 บัญชีธนาคาร",
         "💸 เงินเข้า / เงินออก",
         "📋 ค่าใช้จ่ายสาขา",
-        "🎟️ คูปอง",
     ])
     with tab1: _render_bank_accounts()
     with tab2: _render_transactions()
     with tab3: _render_branch_expenses()
-    with tab4: _render_coupons()
 
 
 # ══════════════════════════════════════════════════════════════════════

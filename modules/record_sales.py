@@ -36,13 +36,17 @@ from utils.id_generator import next_id
 
 
 FRONT_CHANNEL     = "หน้าร้าน"
-DELIVERY_CHANNELS = ["Grab", "LineMan", "อื่นๆ"]
+# ช่องทางที่บรรจุภัณฑ์ถูกใช้ไป (รอบ 3): เพิ่ม Shopee / TikTok / ชำรุด
+DELIVERY_CHANNELS = ["Grab", "LineMan", "Shopee", "TikTok", "อื่นๆ", "ชำรุด"]
+# ช่องทางที่ต้องแนบรูปภาพประกอบ (เช่น ของชำรุด)
+PHOTO_CHANNELS    = ["ชำรุด"]
 ALL_PKG_CHANNELS  = [FRONT_CHANNEL] + DELIVERY_CHANNELS
-MAX_SLIPS = 10
+MAX_SLIPS = 5
 
 # นิยามชนิดบรรจุภัณฑ์: key -> (label, unit)
 PKG_FIELD_DEFS = {
-    "box_qty":                ("ขนมไข่ชนิดกล่อง",        "กล่อง"),
+    "box_qty":                ("ขนมไข่ กล่อง (20 ชิ้น)",  "กล่อง"),
+    "clear_box_qty":          ("ขนมไข่ กล่องใส (15 ชิ้น)", "กล่อง"),
     "bag_qty":                ("ชนิดถุง",                 "ถุง"),
     "yellow_premium_bag_qty": ("ถุงหูหิ้วกระดาษพิมพ์ลาย", "ถุง"),
     "drip_box_qty":           ("กล่องดริป",              "กล่อง"),
@@ -50,18 +54,19 @@ PKG_FIELD_DEFS = {
     "ice_cream_cup_qty":      ("แก้วไอศครีม",             "ใบ"),
     "ice_cream_ring_qty":     ("วงแหวนรองถ้วยไอศครีม",   "แผ่น"),
 }
-# หน้าร้าน: 7 ชนิด (ครบ รวมแก้วไอศครีม + วงแหวนรองถ้วยไอศครีม)
-# Delivery: 5 ชนิด (ไม่มีแก้วไอศครีม + วงแหวน)
-FRONT_FIELDS    = ["box_qty", "bag_qty", "yellow_premium_bag_qty",
+# หน้าร้าน: ครบทุกชนิด (รวมกล่องใส 15 ชิ้น + แก้วไอศครีม + วงแหวน)
+# Delivery: ไม่มีแก้วไอศครีม + วงแหวน
+FRONT_FIELDS    = ["box_qty", "clear_box_qty", "bag_qty", "yellow_premium_bag_qty",
                    "drip_box_qty", "water_cup_qty",
                    "ice_cream_cup_qty", "ice_cream_ring_qty"]
-DELIVERY_FIELDS = ["box_qty", "bag_qty", "yellow_premium_bag_qty",
+DELIVERY_FIELDS = ["box_qty", "clear_box_qty", "bag_qty", "yellow_premium_bag_qty",
                    "drip_box_qty", "water_cup_qty"]
 ALL_PKG_FIELDS  = FRONT_FIELDS   # ชุดรวมครบทุกชนิด (ใช้เก็บข้อมูล + สรุป)
 
-# ป้ายกำกับสรุป (ครบ 7 ชนิด ตามที่ ดร.วรรณ กำหนด) — key -> label ที่ใช้ในสรุป
+# ป้ายกำกับสรุป (ครบทุกชนิด ตามที่ ดร.วรรณ กำหนด) — key -> label ที่ใช้ในสรุป
 PKG_FIELDS = [
-    ("box_qty",                "กล่อง"),
+    ("box_qty",                "กล่อง (20 ชิ้น)"),
+    ("clear_box_qty",          "กล่องใส (15 ชิ้น)"),
     ("bag_qty",                "ถุงกระดาษขาว"),
     ("yellow_premium_bag_qty", "ถุงหูหิ้วกระดาษพิมพ์ลาย"),
     ("drip_box_qty",           "กล่องดริป"),
@@ -86,6 +91,11 @@ SHEET_SCHEMAS = {
         "leftover_box_qty", "leftover_loose_pieces", "leftover_total_pieces",
         "box_unit_price", "leftover_value",
         "batter_mismatch_reason",
+        # รอบ 3: ความเสียหาย + รูปภาพประกอบ (ไข่ / แป้ง / ขนมไข่คงเหลือ / เครื่องดื่ม)
+        "egg_damage_qty", "egg_damage_photo",
+        "flour_damage_qty", "flour_damage_photo",
+        "leftover_damage_qty", "leftover_damage_photo",
+        "drink_damage_qty", "drink_damage_photo",
         "remark", "status", "created_at", "updated_at",
     ],
     SHEET_BRANCH_SALES_COUPONS: [
@@ -96,12 +106,15 @@ SHEET_SCHEMAS = {
     ],
     SHEET_BRANCH_SALES_DELIVERY: [
         "id", "sale_id", "branch_id", "channel",
-        "box_qty", "bag_qty", "yellow_premium_bag_qty", "drip_box_qty",
+        "box_qty", "clear_box_qty", "bag_qty", "yellow_premium_bag_qty",
+        "drip_box_qty",
         "water_cup_qty", "ice_cream_cup_qty", "ice_cream_ring_qty",
+        # รอบ 3: รูปประกอบ (ช่องทางชำรุด) + หมายเหตุ
+        "damage_photo", "remark",
     ],
     # ตารางคูปองแม่ (HQ เติมในรอบ 3) — สร้าง header เผื่อไว้
     SHEET_COUPONS: [
-        "coupon_no", "amount", "status",
+        "coupon_no", "amount", "status", "expire_date",
         "used_branch_id", "used_sale_id", "used_at", "issued_at",
     ],
 }
@@ -133,6 +146,28 @@ def _num(v, default=0.0):
         return float(str(v).replace(",", "").strip() or 0)
     except Exception:
         return default
+
+
+def _parse_any_date(v):
+    """แปลงข้อความวันที่ (หลายรูปแบบ) เป็น date — คืน None ถ้าแปลงไม่ได้/ว่าง"""
+    s = str(v).strip()
+    if not s or s.lower() in ("nan", "none", "nat"):
+        return None
+    s10 = s[:10]
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            return datetime.datetime.strptime(s10, fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def _is_expired(expire_val) -> bool:
+    """คูปองหมดอายุหรือไม่ — เทียบวันที่ Expire กับวันนี้ (หมดอายุ = เลยวันไปแล้ว)"""
+    d = _parse_any_date(expire_val)
+    if d is None:
+        return False   # ไม่ได้กำหนดวันหมดอายุ = ใช้ได้ตลอด
+    return d < datetime.date.today()
 
 
 def _int(v, default=0):
@@ -178,10 +213,15 @@ def _available_coupons_df():
     if "status" in df.columns:
         st_l = df["status"].astype(str).str.strip().str.lower()
         df = df[~st_l.isin(["used", "ใช้แล้ว", "inactive", "ปิด"])]
+    # ตัดคูปองที่หมดอายุออกจากรายการที่ใช้ได้
+    if "expire_date" in df.columns:
+        df = df[~df["expire_date"].map(_is_expired)]
     out = pd.DataFrame({
         "เลขคูปอง": df["coupon_no"].astype(str),
         "มูลค่า (บาท)": df.get("amount", pd.Series([""] * len(df))).map(
             lambda x: f"{_num(x):,.0f}"),
+        "วันหมดอายุ": df.get("expire_date", pd.Series([""] * len(df))).astype(str).map(
+            lambda x: "" if x.lower() in ("nan", "none", "nat") else x),
     })
     return out.reset_index(drop=True)
 
@@ -203,6 +243,10 @@ def _lookup_coupon(coupon_no: str):
     status = str(row.iloc[0].get("status", "")).strip().lower()
     if status in ("used", "ใช้แล้ว"):
         return (False, 0.0, "คูปองนี้ถูกใช้ไปแล้ว")
+    # ตรวจวันหมดอายุ (รอบ 3)
+    if _is_expired(row.iloc[0].get("expire_date", "")):
+        exp = str(row.iloc[0].get("expire_date", "")).strip()
+        return (False, 0.0, f"หมดอายุ (Expire {exp})")
     amount = _num(row.iloc[0].get("amount", 0))
     return (True, amount, "ใช้ได้")
 
@@ -454,7 +498,9 @@ def _render_form(branch_id, sale_date_str, existing):
         value=_num(ex.get("transfer_amount", 0)), key=f"rs_transfer_{suffix}")
 
     # ── สลิปการโอน ─────────────────────────────────────────
-    st.markdown(f"**🧾 สลิปการโอน** (ไม่เกิน {MAX_SLIPS} รูป — แนบเพิ่ม/มาใส่ทีหลังได้)")
+    st.markdown(
+        f"**🧾 แนบหลักฐานยอดขาย-การฝากเงินสด** (ไม่เกิน {MAX_SLIPS} รูป — "
+        "แนบเพิ่ม/มาใส่ทีหลังได้)")
     existing_slips = _get_slips_df(sale_id) if is_edit else pd.DataFrame()
     if not existing_slips.empty:
         scols = st.columns(min(5, len(existing_slips)))
@@ -654,6 +700,33 @@ BATTER_FIELDS = [
 BATTER_KEYS = [k for k, _l, _u in BATTER_FIELDS]
 
 
+def _damage_input(prefix, d, qty_key, photo_key, unit, label="ความเสียหาย"):
+    """ช่องกรอก 'ความเสียหาย' (จำนวน) + แนบรูปภาพประกอบ — คืน (qty, photo_b64)
+    ใส่ค่าลง vals ผ่านผู้เรียก
+    """
+    c1, c2 = st.columns([1, 2])
+    qty = c1.number_input(
+        f"🔻 {label} ({unit})", min_value=0, step=1,
+        value=_int(d.get(qty_key, 0)), key=f"{prefix}_{qty_key}")
+    photo_b64 = str(d.get(photo_key, "") or "")
+    with c2:
+        if photo_b64:
+            try:
+                st.image(base64.b64decode(photo_b64), width=140,
+                         caption="รูปความเสียหายที่แนบไว้")
+            except Exception:
+                pass
+        up = st.file_uploader(
+            f"📷 แนบรูป{label}", type=["png", "jpg", "jpeg"],
+            key=f"{prefix}_{photo_key}_up")
+        if up is not None:
+            try:
+                photo_b64 = _encode_image(up)
+            except Exception:
+                pass
+    return qty, photo_b64
+
+
 def _leftover_inputs(prefix, defaults=None):
     """ช่องกรอก ตีแป้ง (วัตถุดิบที่ใช้ไป) + ขนมไข่คงเหลือ
     คืน dict ค่าที่กรอกทั้งหมด
@@ -670,6 +743,15 @@ def _leftover_inputs(prefix, defaults=None):
             vals[k] = col.number_input(
                 f"{label} ({unit})", min_value=0, step=1,
                 value=_int(d.get(k, 0)), key=f"{prefix}_{k}")
+
+    # ── ความเสียหาย: ไข่ + แป้งทุกประเภท (รอบ 3) ──────────────
+    st.markdown("**🔻 ความเสียหาย — ไข่ / แป้ง (แนบรูปภาพประกอบ)**")
+    vals["egg_damage_qty"], vals["egg_damage_photo"] = _damage_input(
+        prefix, d, "egg_damage_qty", "egg_damage_photo", "ฟอง",
+        label="ไข่เสียหาย")
+    vals["flour_damage_qty"], vals["flour_damage_photo"] = _damage_input(
+        prefix, d, "flour_damage_qty", "flour_damage_photo", "ถุง",
+        label="แป้งเสียหาย (ทุกประเภท)")
 
     # ── ตรวจสอบ: แป้งสำเร็จรูป ต้องเท่ากับ ส่วนผสม (ถุงใหญ่/ถุงเล็ก) ──
     big_mismatch   = vals.get("flour_finished_big_used", 0)   != vals.get("mix_big_used", 0)
@@ -708,6 +790,18 @@ def _leftover_inputs(prefix, defaults=None):
                                      + vals["leftover_loose_pieces"])
     vals["box_unit_price"] = 0
     vals["leftover_value"] = 0
+
+    # ── ความเสียหาย: ขนมไข่คงเหลือ (รอบ 3) ───────────────────
+    st.markdown("**🔻 ความเสียหาย — ขนมไข่คงเหลือ (แนบรูปภาพประกอบ)**")
+    vals["leftover_damage_qty"], vals["leftover_damage_photo"] = _damage_input(
+        prefix, d, "leftover_damage_qty", "leftover_damage_photo", "ชิ้น",
+        label="ขนมไข่เสียหาย")
+
+    # ── เครื่องดื่ม: ทำเช่นเดียวกับขนมไข่ (รอบ 3 ข้อ 10) ──────
+    st.markdown("**🥤 เครื่องดื่ม — ความเสียหาย (แนบรูปภาพประกอบ)**")
+    vals["drink_damage_qty"], vals["drink_damage_photo"] = _damage_input(
+        prefix, d, "drink_damage_qty", "drink_damage_photo", "แก้ว",
+        label="เครื่องดื่มเสียหาย")
     return vals
 
 
@@ -715,7 +809,10 @@ def _pkg_channel_input(ch, prefix, defaults, fields, expanded=False, boxed=False
     """ช่องกรอกบรรจุภัณฑ์ 1 ช่องทาง (ตามรายการ fields) — คืน dict ครบทุกชนิด"""
     k = ch.replace(" ", "_")
     d = (defaults or {}).get(ch, {})
-    icon = {"หน้าร้าน": "🏪", "Grab": "🛵", "LineMan": "🛵"}.get(ch, "📦")
+    icon = {"หน้าร้าน": "🏪", "Grab": "🛵", "LineMan": "🛵",
+            "Shopee": "🛍️", "TikTok": "🎵", "อื่นๆ": "📦",
+            "ชำรุด": "⚠️"}.get(ch, "📦")
+    need_photo = ch in PHOTO_CHANNELS
 
     def _render():
         vals = {}
@@ -729,16 +826,40 @@ def _pkg_channel_input(ch, prefix, defaults, fields, expanded=False, boxed=False
                     vals[fld] = st.number_input(
                         f"{label} ({unit}) – {ch}", min_value=0, step=1,
                         value=_int(d.get(fld, 0)), key=f"{prefix}_{fld}_{k}")
-        return vals
+        # ── ช่องทางชำรุด: แนบรูปภาพประกอบ ──
+        photo_b64 = str(d.get("damage_photo", "") or "")
+        if need_photo:
+            if photo_b64:
+                try:
+                    st.image(base64.b64decode(photo_b64),
+                             caption="รูปของชำรุดที่แนบไว้", width=180)
+                except Exception:
+                    pass
+            up = st.file_uploader(
+                f"📷 แนบรูปของชำรุด – {ch}", type=["png", "jpg", "jpeg"],
+                key=f"{prefix}_photo_{k}")
+            if up is not None:
+                try:
+                    photo_b64 = _encode_image(up)
+                except Exception:
+                    pass
+        # ── หมายเหตุประจำช่องทาง (เฉพาะช่องทาง Delivery ไม่รวมหน้าร้าน) ──
+        remark = str(d.get("remark", "") or "")
+        if not boxed:
+            remark = st.text_input(
+                f"📝 หมายเหตุ – {ch}", value=remark,
+                key=f"{prefix}_remark_{k}",
+                placeholder="เช่น ออเดอร์นอก / แจกฟรี / เหตุผลของชำรุด")
+        return vals, photo_b64, remark
 
     if boxed:
         st.markdown(f"**{icon} {ch}**")
-        vals = _render()
+        vals, photo_b64, remark = _render()
     else:
         with st.expander(f"{icon} {ch}", expanded=expanded):
-            vals = _render()
+            vals, photo_b64, remark = _render()
 
-    row = {"channel": ch}
+    row = {"channel": ch, "damage_photo": photo_b64, "remark": remark}
     for fld in ALL_PKG_FIELDS:      # เก็บครบทุกชนิด (ที่ไม่มีในช่องทางนี้ = 0)
         row[fld] = vals.get(fld, 0)
     return row
@@ -752,8 +873,9 @@ def _packaging_inputs(prefix, defaults=None):
     st.caption("⚠️ ถ้าสาขาไหนไม่มีบางบรรจุภัณฑ์ ให้กดผ่าน (ปล่อยเป็น 0) ได้เลย")
     rows.append(_pkg_channel_input(FRONT_CHANNEL, prefix, defaults,
                                    FRONT_FIELDS, boxed=True))
-    # Delivery (7 ชนิด)
-    st.markdown("#### 🛵 Delivery (Grab / LineMan / อื่นๆ)")
+    # Delivery / ช่องทางอื่น (Grab / LineMan / Shopee / TikTok / อื่นๆ / ชำรุด)
+    st.markdown("#### 🛵 ช่องทางอื่น (Grab / LineMan / Shopee / TikTok / อื่นๆ / ชำรุด)")
+    st.caption("บรรจุภัณฑ์ที่ถูกใช้ไปในแต่ละช่องทาง — 'ชำรุด' ให้แนบรูปภาพประกอบ")
     for ch in DELIVERY_CHANNELS:
         rows.append(_pkg_channel_input(ch, prefix, defaults,
                                        DELIVERY_FIELDS, expanded=(ch == "Grab")))
@@ -769,7 +891,9 @@ def _pkg_summary(rows):
 def _delivery_row_dict(did, sale_id, branch_id, r):
     """สร้าง dict สำหรับบันทึกลงตาราง delivery — เก็บครบทุกชนิดบรรจุภัณฑ์"""
     d = {"id": did, "sale_id": sale_id, "branch_id": branch_id,
-         "channel": r["channel"]}
+         "channel": r["channel"],
+         "damage_photo": r.get("damage_photo", ""),
+         "remark": r.get("remark", "")}
     for fld in ALL_PKG_FIELDS:
         d[fld] = r.get(fld, 0)
     return d
@@ -800,6 +924,14 @@ def _save_new(**kw):
         "leftover_total_pieces": _lo.get("leftover_total_pieces", 0),
         "box_unit_price":        _lo.get("box_unit_price", 0),
         "leftover_value":        _lo.get("leftover_value", 0),
+        "egg_damage_qty":        _lo.get("egg_damage_qty", 0),
+        "egg_damage_photo":      _lo.get("egg_damage_photo", ""),
+        "flour_damage_qty":      _lo.get("flour_damage_qty", 0),
+        "flour_damage_photo":    _lo.get("flour_damage_photo", ""),
+        "leftover_damage_qty":   _lo.get("leftover_damage_qty", 0),
+        "leftover_damage_photo": _lo.get("leftover_damage_photo", ""),
+        "drink_damage_qty":      _lo.get("drink_damage_qty", 0),
+        "drink_damage_photo":    _lo.get("drink_damage_photo", ""),
         "remark":          kw["remark"],
         "status":          "submitted",
         "created_at":      now,
@@ -862,6 +994,14 @@ def _save_edit(**kw):
         "leftover_total_pieces": _lo.get("leftover_total_pieces", 0),
         "box_unit_price":        _lo.get("box_unit_price", 0),
         "leftover_value":        _lo.get("leftover_value", 0),
+        "egg_damage_qty":        _lo.get("egg_damage_qty", 0),
+        "egg_damage_photo":      _lo.get("egg_damage_photo", ""),
+        "flour_damage_qty":      _lo.get("flour_damage_qty", 0),
+        "flour_damage_photo":    _lo.get("flour_damage_photo", ""),
+        "leftover_damage_qty":   _lo.get("leftover_damage_qty", 0),
+        "leftover_damage_photo": _lo.get("leftover_damage_photo", ""),
+        "drink_damage_qty":      _lo.get("drink_damage_qty", 0),
+        "drink_damage_photo":    _lo.get("drink_damage_photo", ""),
         "remark":          kw["remark"],
         "updated_at":      now,
     })

@@ -21,6 +21,7 @@ DEFAULT_DEPTS = {
     "accounting":   {"name": "📒 ฝ่ายบัญชี",          "password": "acc1234",      "menus": "accounting"},
     "dashboard":    {"name": "📈 Dashboard/ผู้บริหาร","password": "dash1234",     "menus": "dashboard"},
     "petty_cash":   {"name": "💵 เงินสดย่อย",          "password": "petty1234",    "menus": "petty_cash"},
+    "sale_audit":   {"name": "🔍 ฝ่าย Sale Audit",     "password": "sale1234",     "menus": "sale_audit"},
 }
 
 DEPT_MENU_ACCESS = {
@@ -37,6 +38,7 @@ DEPT_MENU_ACCESS = {
     "accounting":   ["accounting","finance","export"],
     "dashboard":    ["dashboard","export"],
     "petty_cash":   ["petty_cash","export"],
+    "sale_audit":   ["sale_audit","export"],
 }
 
 
@@ -62,6 +64,23 @@ def _init_auth_sheet():
                     "is_active": "TRUE",
                 })
             write_sheet(SHEET_AUTH, pd.DataFrame(rows))
+        else:
+            # เติมแผนกใหม่ที่ยังไม่มีในตาราง (idempotent) — ไม่แตะแผนกเดิม/รหัสเดิม
+            existing = set(df["dept_id"].astype(str))
+            missing = [d for d in DEFAULT_DEPTS if d not in existing]
+            if missing:
+                new_rows = []
+                for dept_id in missing:
+                    info = DEFAULT_DEPTS[dept_id]
+                    new_rows.append({
+                        "dept_id":   dept_id,
+                        "dept_name": info["name"],
+                        "pw_hash":   _hash(info["password"]),
+                        "menus":     info["menus"],
+                        "is_active": "TRUE",
+                    })
+                merged = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+                write_sheet(SHEET_AUTH, merged)
     except Exception:
         # quota exceeded หรือ network error — ใช้ DEFAULT_DEPTS แทน
         pass

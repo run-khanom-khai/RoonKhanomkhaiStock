@@ -53,9 +53,9 @@ if not st.session_state["logged_in"]:
                  subtitle="Sale Audit (ตรวจสอบยอดขาย) — กรุณาเข้าสู่ระบบ")
     st.stop()
 
-if st.session_state.get("dept_id") not in {"audit", "finance", "accounting", "admin"}:
+if st.session_state.get("dept_id") not in {"sale_audit", "admin"}:
     st.error("⛔ บัญชีนี้ไม่มีสิทธิ์ใช้งาน Sale Audit")
-    st.caption("กรุณาเข้าสู่ระบบด้วยบัญชีฝ่ายตรวจสอบ / การเงิน / บัญชี / Admin")
+    st.caption("แอปนี้เข้าได้เฉพาะบัญชี 'ฝ่าย Sale Audit' เท่านั้น")
     if st.button("🚪 ออกจากระบบ", use_container_width=True, key="sa_logout0"):
         _reset_session()
         st.rerun()

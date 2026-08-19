@@ -386,3 +386,217 @@ alter table material_cost         disable row level security;
 
 -- หมายเหตุ: รหัสผ่านของสาขา ระบบจะ seed ให้อัตโนมัติในการเปิดแอปครั้งแรก
 --          (ดึงจากไฟล์ modules/branch_auth.py) — ไม่ต้อง insert ที่นี่
+
+-- ============================================================
+-- SAFETY: เพิ่มคอลัมน์ Primary Key ที่ create-if-not-exists อาจข้ามไป
+-- (กัน error PGRST204 กับตารางเก่าที่มีอยู่แล้วแต่ขาดคอลัมน์ PK)
+-- ============================================================
+alter table stock_movements          add column if not exists stock_movement_id       text;
+alter table purchase_orders          add column if not exists purchase_id              text;
+alter table purchase_order_items     add column if not exists purchase_item_id         text;
+alter table stock_in_to_branch       add column if not exists stock_in_id              text;
+alter table production_batches       add column if not exists batch_id                 text;
+alter table production_material_used add column if not exists production_used_id        text;
+alter table marketing_daily_sales       add column if not exists marketing_sales_id      text;
+alter table marketing_daily_sales_items add column if not exists marketing_sales_item_id text;
+alter table sales_reconcile          add column if not exists reconcile_id             text;
+notify pgrst, 'reload schema';
+-- ============================================================
+-- roon_asset_tables.sql
+-- ตารางสำหรับเมนู 'ซ่อมบำรุงทรัพย์สิน' (ฝ่ายจัดซื้อ)
+--   assets        = ข้อมูลทรัพย์สิน (ผูกกับ item ที่ประเภทการซื้อ = ทรัพย์สิน)
+--   asset_repairs = ประวัติการส่งซ่อม
+-- ปลอดภัย: create-if-not-exists + add column if not exists (รันซ้ำได้)
+--          เปิด RLS ไว้ (แอปใช้ service_role key จึงทำงานได้ปกติ)
+-- ============================================================
+
+create table if not exists assets (
+    asset_id text primary key,
+    item_id text, item_name text, purchase_date text, brand text,
+    spec text, seller text, seller_phone text, serial text, created_at text
+);
+alter table assets add column if not exists asset_id      text;
+alter table assets add column if not exists item_id       text;
+alter table assets add column if not exists item_name     text;
+alter table assets add column if not exists purchase_date text;
+alter table assets add column if not exists brand         text;
+alter table assets add column if not exists spec          text;
+alter table assets add column if not exists seller        text;
+alter table assets add column if not exists seller_phone  text;
+alter table assets add column if not exists serial        text;
+alter table assets add column if not exists created_at    text;
+
+create table if not exists asset_repairs (
+    repair_id text primary key,
+    item_id text, send_date text, symptom text,
+    repair_shop text, repair_shop_phone text,
+    repairer_name text, repairer_phone text,
+    how_repaired text, return_date text, status text,
+    created_at text, updated_at text
+);
+alter table asset_repairs add column if not exists repair_id         text;
+alter table asset_repairs add column if not exists item_id           text;
+alter table asset_repairs add column if not exists send_date         text;
+alter table asset_repairs add column if not exists symptom           text;
+alter table asset_repairs add column if not exists repair_shop       text;
+alter table asset_repairs add column if not exists repair_shop_phone text;
+alter table asset_repairs add column if not exists repairer_name     text;
+alter table asset_repairs add column if not exists repairer_phone    text;
+alter table asset_repairs add column if not exists how_repaired      text;
+alter table asset_repairs add column if not exists return_date       text;
+alter table asset_repairs add column if not exists status            text;
+alter table asset_repairs add column if not exists created_at        text;
+alter table asset_repairs add column if not exists updated_at        text;
+
+-- items: เผื่อยังไม่มีคอลัมน์ประเภทการซื้อ (ใช้แยกว่าเป็น 'ทรัพย์สิน')
+alter table items add column if not exists purchase_category text;
+
+-- เปิด RLS (ปลอดภัย — service_role ข้าม RLS อยู่แล้ว)
+alter table assets        enable row level security;
+alter table asset_repairs enable row level security;
+
+notify pgrst, 'reload schema';
+-- ============================================================
+-- roon_bank_tables.sql
+-- แก้ error PGRST204: Could not find the 'bank_account_id' column of 'bank_accounts'
+-- สร้างตารางบัญชีธนาคาร + รายการเดินบัญชี (ยอดเงินประจำวัน)
+-- ปลอดภัย: create-if-not-exists + add column if not exists (รันซ้ำได้) • เปิด RLS
+-- ============================================================
+
+create table if not exists bank_accounts (
+    bank_account_id text primary key,
+    bank_name text, bank_branch text, account_no text,
+    account_name text, current_balance text, is_active text
+);
+alter table bank_accounts add column if not exists bank_account_id text;
+alter table bank_accounts add column if not exists bank_name       text;
+alter table bank_accounts add column if not exists bank_branch     text;
+alter table bank_accounts add column if not exists account_no      text;
+alter table bank_accounts add column if not exists account_name    text;
+alter table bank_accounts add column if not exists current_balance text;
+alter table bank_accounts add column if not exists is_active       text;
+
+create table if not exists bank_transactions (
+    transaction_id text primary key,
+    transaction_date text, bank_account_id text,
+    deposit_amount text, deposit_detail text,
+    withdraw_amount text, withdraw_detail text,
+    balance_after text, remark text
+);
+alter table bank_transactions add column if not exists transaction_id   text;
+alter table bank_transactions add column if not exists transaction_date text;
+alter table bank_transactions add column if not exists bank_account_id  text;
+alter table bank_transactions add column if not exists deposit_amount   text;
+alter table bank_transactions add column if not exists deposit_detail   text;
+alter table bank_transactions add column if not exists withdraw_amount  text;
+alter table bank_transactions add column if not exists withdraw_detail  text;
+alter table bank_transactions add column if not exists balance_after    text;
+alter table bank_transactions add column if not exists remark           text;
+
+-- branches: เก็บเลขที่บัญชีธนาคารที่ใช้รับเงินของสาขา (แทนช่องหมายเหตุเดิม)
+alter table branches add column if not exists bank_account_no text;
+
+alter table bank_accounts     enable row level security;
+alter table bank_transactions enable row level security;
+
+notify pgrst, 'reload schema';
+-- ============================================================
+-- roon_sale_audit_tables.sql
+-- ตารางสำหรับแอป Sale Audit
+--   sale_bank_income  = ยอดเงินขายเข้าธนาคารรายวัน/สาขา (เมนู ①)
+--   sale_audit_config = ตั้งค่า (รหัสผ่านเมนู 1.1)
+--   + เพิ่มคอลัมน์ 'บรรจุภัณฑ์เสียหาย' และรูปภาพ ใน audit_stock_balance
+-- ปลอดภัย: รันซ้ำได้ • เปิด RLS (แอปใช้ service_role key)
+-- ============================================================
+
+create table if not exists sale_bank_income (
+    income_id text primary key,
+    sale_date text, branch_id text, branch_group_id text,
+    bank_account_no text, amount text, entered_by text,
+    created_at text, updated_at text
+);
+alter table sale_bank_income add column if not exists income_id       text;
+alter table sale_bank_income add column if not exists sale_date       text;
+alter table sale_bank_income add column if not exists branch_id       text;
+alter table sale_bank_income add column if not exists branch_group_id text;
+alter table sale_bank_income add column if not exists bank_account_no text;
+alter table sale_bank_income add column if not exists amount          text;
+alter table sale_bank_income add column if not exists entered_by      text;
+alter table sale_bank_income add column if not exists created_at      text;
+alter table sale_bank_income add column if not exists updated_at      text;
+
+create table if not exists sale_audit_config (
+    config_key text primary key,
+    config_value text
+);
+alter table sale_audit_config add column if not exists config_value text;
+-- รหัสผ่านเริ่มต้นเมนู 1.1 (เปลี่ยนได้ภายหลัง)
+insert into sale_audit_config (config_key, config_value)
+  values ('mall_password', 'roon-mall')
+  on conflict (config_key) do nothing;
+
+-- บรรจุภัณฑ์เสียหาย/แตกหัก + รูปภาพ (กรอกที่แอปฝ่ายตรวจสอบนับ)
+alter table audit_stock_balance add column if not exists dmg_plastic_box_qty       text;
+alter table audit_stock_balance add column if not exists dmg_paper_bag_qty         text;
+alter table audit_stock_balance add column if not exists dmg_printed_carry_bag_qty text;
+alter table audit_stock_balance add column if not exists dmg_water_cup_qty         text;
+alter table audit_stock_balance add column if not exists dmg_ice_cream_cup_qty     text;
+alter table audit_stock_balance add column if not exists damage_photo              text;
+
+alter table sale_bank_income  enable row level security;
+alter table sale_audit_config enable row level security;
+
+notify pgrst, 'reload schema';
+-- ============================================================
+-- roon_sale_audit_resolution.sql
+-- ตารางบันทึก 'ชี้แจงการแก้ปัญหา DIFF' โดยฝ่าย Audit (Sale Audit เมนู ④)
+--   แก้ไขได้ · ลบไม่ได้ · แนบรูปได้ 5 รูป
+-- ปลอดภัย: create-if-not-exists + add column if not exists (รันซ้ำได้) • เปิด RLS
+-- ============================================================
+
+create table if not exists sale_audit_resolution (
+    resolution_id text primary key,
+    sale_date text, branch_id text,
+    called_who text, call_time text, call_date text, how_fixed text,
+    photo1 text, photo2 text, photo3 text, photo4 text, photo5 text,
+    created_by text, created_at text, updated_at text
+);
+alter table sale_audit_resolution add column if not exists resolution_id text;
+alter table sale_audit_resolution add column if not exists sale_date  text;
+alter table sale_audit_resolution add column if not exists branch_id  text;
+alter table sale_audit_resolution add column if not exists called_who text;
+alter table sale_audit_resolution add column if not exists call_time  text;
+alter table sale_audit_resolution add column if not exists call_date  text;
+alter table sale_audit_resolution add column if not exists how_fixed  text;
+alter table sale_audit_resolution add column if not exists photo1     text;
+alter table sale_audit_resolution add column if not exists photo2     text;
+alter table sale_audit_resolution add column if not exists photo3     text;
+alter table sale_audit_resolution add column if not exists photo4     text;
+alter table sale_audit_resolution add column if not exists photo5     text;
+alter table sale_audit_resolution add column if not exists created_by text;
+alter table sale_audit_resolution add column if not exists created_at text;
+alter table sale_audit_resolution add column if not exists updated_at text;
+
+alter table sale_audit_resolution enable row level security;
+
+notify pgrst, 'reload schema';
+
+-- ============================================================
+-- ROUND 3 (19/8/2026) — คอลัมน์ใหม่ทั้งหมด (idempotent)
+-- ============================================================
+alter table coupons add column if not exists expire_date text;
+
+alter table branch_sales_delivery add column if not exists clear_box_qty text;
+alter table branch_sales_delivery add column if not exists damage_photo  text;
+alter table branch_sales_delivery add column if not exists remark        text;
+
+alter table branch_sales add column if not exists egg_damage_qty        text;
+alter table branch_sales add column if not exists egg_damage_photo      text;
+alter table branch_sales add column if not exists flour_damage_qty      text;
+alter table branch_sales add column if not exists flour_damage_photo    text;
+alter table branch_sales add column if not exists leftover_damage_qty   text;
+alter table branch_sales add column if not exists leftover_damage_photo text;
+alter table branch_sales add column if not exists drink_damage_qty      text;
+alter table branch_sales add column if not exists drink_damage_photo    text;
+
+notify pgrst, 'reload schema';

@@ -230,6 +230,53 @@ def _branch_keyed_used(branch_id, d_date, deliv_field, channels=None):
     return sum(_num(x) for x in d[deliv_field].tolist())
 
 
+# ช่องทางที่บรรจุภัณฑ์ถูกใช้ไป (แสดงเป็นคอลัมน์ในตาราง 3.2) — รอบ 3
+SALE_AUDIT_TABLE_CHANNELS = ["LineMan", "Grab", "Shopee", "TikTok", "อื่นๆ", "ชำรุด"]
+# ช่องทางที่ 'ไม่รับเงินที่ร้าน' (นับเป็น Delivery/Online) — ไม่รวม 'ชำรุด'
+SALE_AUDIT_NOMONEY_CHANNELS = ["LineMan", "Grab", "Shopee", "TikTok", "อื่นๆ"]
+
+
+def _has_resolution(branch_id, D):
+    """ฝ่าย Sale Audit ได้โทร/บันทึกการแก้ไขของสาขา+วัน D หรือยัง
+    (มีข้อความ 'โทรหาใคร' หรือ 'แก้ไขอย่างไร' = ถือว่ามีการแก้ไข)"""
+    try:
+        rdf = read_sheet(SHEET_SALE_AUDIT_RESOLUTION)
+    except Exception:
+        return False
+    if rdf is None or rdf.empty or "branch_id" not in rdf.columns:
+        return False
+    m = rdf[(rdf["branch_id"].astype(str) == str(branch_id)) &
+            (rdf["sale_date"].astype(str).str[:10] == str(D)[:10])]
+    if m.empty:
+        return False
+    r = m.iloc[-1]
+    return bool(str(r.get("called_who", "")).strip() or
+                str(r.get("how_fixed", "")).strip())
+
+
+def _branch_delivery_notes(branch_id, D):
+    """ดึง (channel, remark, photo_b64) จาก branch_sales_delivery ของวัน D
+    เฉพาะแถวที่มีหมายเหตุหรือรูปภาพ — ใช้แสดงใต้ตาราง 3.2"""
+    out = []
+    sdf = read_sheet(SHEET_BRANCH_SALES)
+    if sdf is None or sdf.empty:
+        return out
+    sids = sdf[(sdf["branch_id"].astype(str).str.strip() == str(branch_id)) &
+               (sdf["sale_date"].astype(str).str[:10] == str(D)[:10])]["sale_id"].astype(str).tolist()
+    if not sids:
+        return out
+    ddf = read_sheet(SHEET_BRANCH_SALES_DELIVERY)
+    if ddf is None or ddf.empty or "sale_id" not in ddf.columns:
+        return out
+    d = ddf[ddf["sale_id"].astype(str).isin(sids)]
+    for _, r in d.iterrows():
+        rm = str(r.get("remark", "") or "").strip()
+        ph = str(r.get("damage_photo", "") or "").strip()
+        if rm or ph:
+            out.append((str(r.get("channel", "")).strip(), rm, ph))
+    return out
+
+
 def _get_config(key, default=""):
     try:
         df = read_sheet(SHEET_SALE_AUDIT_CONFIG)
@@ -249,10 +296,11 @@ def render():
     st.title("🔍 Sale Audit — ตรวจสอบยอดขาย")
     st.caption("เทียบยอดขายจาก เงินสาขาแจ้ง · บรรจุภัณฑ์ที่ใช้จริง · เงินเข้าธนาคารจริง")
 
-    t1, t2, t3 = st.tabs([
+    t1, t2, t3, t4 = st.tabs([
         "① บันทึกเงินธนาคารรายวัน",
         "② เทียบยอดบรรจุภัณฑ์",
         "③ สรุปเทียบเงิน 3 ทาง",
+        "④ คูปอง / Promotion",
     ])
     with t1:
         _render_bank_income()
@@ -260,6 +308,12 @@ def render():
         _render_pkg_compare()
     with t3:
         _render_money_summary()
+    with t4:
+        try:
+            from modules import coupon_manager
+            coupon_manager.render()
+        except Exception as e:
+            st.error(f"❌ ไม่สามารถโหลดเมนูคูปองได้: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -498,39 +552,64 @@ def _render_money_summary():
 
     # ── (ก) ขนมไข่ — คิดจากบรรจุภัณฑ์ที่ฝ่ายตรวจสอบนับ ──
     st.markdown("#### 3.2 (ก) ขนมไข่ — จากบรรจุภัณฑ์ที่ฝ่ายตรวจสอบนับ")
+    st.caption("แต่ละช่องทาง = จำนวนบรรจุภัณฑ์ที่ใช้ไปของช่องทางนั้น · "
+               "ยอดเงิน(บาท) = ใช้จริง − (LineMan+Grab+Shopee+TikTok+อื่นๆ+ชำรุด) · "
+               "เป็นเงิน = ยอดเงิน(บาท) × ราคา")
     egg_money = 0.0
-    no_money_total = 0.0
-    dmg_total = 0.0
+    no_money_total = 0.0     # ช่องทางไม่รับเงินที่ร้าน (ไม่รวมชำรุด)
+    dmg_total = 0.0          # ชำรุด
     detail_rows = ""
     for key, label, af, df_field, price0, prod_id in PKG_CANON:
         if key not in ("box", "bag", "ybag"):   # เครื่องดื่ม (แก้ว) คิดแยกด้านล่าง
             continue
         used_audit = max(_num(au_D.get(af, 0)) - _num(au_Dp1.get(af, 0)), 0) if af else 0.0
-        deliv_online = _branch_keyed_used(branch_id, D, df_field, channels=SALE_AUDIT_DELIVERY_CHANNELS) if df_field else 0.0
-        damaged = _num(au_Dp1.get(f"dmg_{af}", 0)) if af else 0.0
+        # จำนวนที่ใช้ไปแยกตามช่องทาง (จากที่สาขา key)
+        ch_qty = {ch: (_branch_keyed_used(branch_id, D, df_field, channels=[ch]) if df_field else 0.0)
+                  for ch in SALE_AUDIT_TABLE_CHANNELS}
+        sum_ch = sum(ch_qty.values())
+        nomoney = sum(ch_qty[c] for c in SALE_AUDIT_NOMONEY_CHANNELS)
+        damaged = ch_qty.get("ชำรุด", 0.0)
         auto_price = _num(pmap.get(prod_id, 0)) if prod_id else 0.0
         default_price = auto_price if auto_price > 0 else float(price0)
         src = f" (สินค้า {prod_id})" if auto_price > 0 else ""
         price = st.number_input(f"ราคา/หน่วย — {label}{src}", min_value=0.0, step=1.0,
                                 value=float(default_price), key=f"ms_price_{key}")
-        payable = max(used_audit - deliv_online - damaged, 0)
+        payable = max(used_audit - sum_ch, 0)
         money = payable * price
         egg_money += money
-        no_money_total += deliv_online
+        no_money_total += nomoney
         dmg_total += damaged
-        detail_rows += (f"<tr><td style='padding:5px;'>{label}</td>"
-                        f"<td style='padding:5px;text-align:center;'>{_fmt(used_audit)}</td>"
-                        f"<td style='padding:5px;text-align:center;color:#E65100;'>{_fmt(deliv_online)}</td>"
-                        f"<td style='padding:5px;text-align:center;color:#C62828;'>{_fmt(damaged)}</td>"
-                        f"<td style='padding:5px;text-align:center;font-weight:700;'>{_fmt(payable)}</td>"
-                        f"<td style='padding:5px;text-align:center;'>{price:,.0f}</td>"
-                        f"<td style='padding:5px;text-align:center;'>{money:,.2f}</td></tr>")
+        cells = (f"<td style='padding:5px;'>{label}</td>"
+                 f"<td style='padding:5px;text-align:center;'>{_fmt(used_audit)}</td>")
+        for ch in SALE_AUDIT_TABLE_CHANNELS:
+            color = "#C62828" if ch == "ชำรุด" else "#E65100"
+            cells += (f"<td style='padding:5px;text-align:center;color:{color};'>"
+                      f"{_fmt(ch_qty[ch])}</td>")
+        cells += (f"<td style='padding:5px;text-align:center;font-weight:700;'>{_fmt(payable)}</td>"
+                  f"<td style='padding:5px;text-align:center;'>{price:,.0f}</td>"
+                  f"<td style='padding:5px;text-align:center;'>{money:,.2f}</td>")
+        detail_rows += f"<tr>{cells}</tr>"
     hdr = ("<tr>" + "".join(
-        f"<th style='padding:6px;background:#6A1B9A;color:#fff;'>{h}</th>"
-        for h in ["บรรจุภัณฑ์", "ใช้จริง(ตรวจสอบ)", "หัก Delivery/Online", "หัก เสียหาย",
-                  "คิดเงิน(หน่วย)", "ราคา", "เป็นเงิน"]) + "</tr>")
-    st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;'>{hdr}{detail_rows}</table>",
-                unsafe_allow_html=True)
+        f"<th style='padding:6px;background:#6A1B9A;color:#fff;font-size:.85rem;'>{h}</th>"
+        for h in (["บรรจุภัณฑ์", "ใช้จริง(ตรวจสอบ)"] + SALE_AUDIT_TABLE_CHANNELS
+                  + ["ยอดเงิน(บาท)", "ราคา", "เป็นเงิน"])) + "</tr>")
+    st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;font-size:.9rem;'>"
+                f"{hdr}{detail_rows}</table>", unsafe_allow_html=True)
+
+    # ── หมายเหตุ / รูปของชำรุด (จากที่สาขาบันทึกในช่องทาง) ──
+    _notes = _branch_delivery_notes(branch_id, D)
+    if _notes:
+        st.markdown("###### 📝 หมายเหตุ / รูปของชำรุด (จากสาขา)")
+        for ch, rm, ph in _notes:
+            cc1, cc2 = st.columns([3, 1])
+            with cc1:
+                st.markdown(f"- **{ch}**: {rm if rm else '(ไม่มีหมายเหตุ)'}")
+            with cc2:
+                if ph:
+                    try:
+                        st.image(base64.b64decode(ph), width=110)
+                    except Exception:
+                        pass
 
     # ── (ข) เครื่องดื่ม/รายการอื่น — แยกตามชนิดจากยอดขายที่บันทึก × ราคาในระบบ ──
     st.markdown("#### 3.2 (ข) เครื่องดื่ม/รายการอื่น — แยกตามชนิด (จากยอดขายหน้าร้าน)")
@@ -571,8 +650,26 @@ def _render_money_summary():
 
     # ── ตารางเทียบ 3 คอลัมน์ ──
     st.markdown("#### 💰 ตารางเทียบเงิน 3 ทาง")
+
+    # ── รอบ 3: เตือนสีแดง ถ้าฝ่าย Sale Audit ยังไม่โทร/บันทึกแก้ไข และเกิน 3 วัน ──
+    try:
+        _D_date = D if isinstance(D, datetime.date) else datetime.datetime.strptime(str(D)[:10], "%Y-%m-%d").date()
+        _days_late = (datetime.date.today() - _D_date).days
+    except Exception:
+        _days_late = 0
+    _resolved = _has_resolution(branch_id, D)
+    _overdue = (_days_late > 3) and (not _resolved)
+    _tbl_border = "#C62828" if _overdue else "#6A1B9A"
+    if _overdue:
+        st.markdown(
+            "<div style='background:#C62828;color:#fff;padding:12px;border-radius:8px;"
+            "font-weight:800;font-size:1.05rem;margin-bottom:8px;'>"
+            f"🚨 เกินกำหนด {_days_late} วัน — ฝ่าย Sale Audit ยังไม่ได้โทร/บันทึกการแก้ไข "
+            "ของวันขายนี้! กรุณาบันทึกการชี้แจง (เมนู ④ ด้านล่าง) โดยด่วน "
+            "จนกว่าจะมีการแก้ไข ระบบจะเตือนสีแดงนี้ค้างไว้</div>",
+            unsafe_allow_html=True)
     st.markdown(
-        f"<table style='width:100%;border-collapse:collapse;border:2px solid #6A1B9A;'>"
+        f"<table style='width:100%;border-collapse:collapse;border:2px solid {_tbl_border};'>"
         f"<tr>"
         f"<th style='padding:10px;background:#2E7D32;color:#fff;'>3.1 เงินจริงจากสาขาแจ้ง</th>"
         f"<th style='padding:10px;background:#6A1B9A;color:#fff;'>3.2 เงินจากบรรจุภัณฑ์ (ตรวจสอบ)</th>"
