@@ -4,7 +4,7 @@ auth.py  –  ระบบ Login รหัสผ่านแยกแผนก
 import hashlib
 import streamlit as st
 import pandas as pd
-from modules.excel_db import read_sheet, write_sheet, init_workbook
+from modules.excel_db import read_sheet, write_sheet, append_row, init_workbook
 
 SHEET_AUTH = "department_passwords"
 
@@ -65,22 +65,22 @@ def _init_auth_sheet():
                 })
             write_sheet(SHEET_AUTH, pd.DataFrame(rows))
         else:
-            # เติมแผนกใหม่ที่ยังไม่มีในตาราง (idempotent) — ไม่แตะแผนกเดิม/รหัสเดิม
+            # เติมแผนกใหม่ที่ยังไม่มีในตาราง (idempotent)
+            # ⚠️ ใช้ append_row เฉพาะแถวที่ขาด — ห้ามใช้ write_sheet (จะ truncate ตารางรหัสผ่านทั้งตาราง = อันตราย)
             existing = set(df["dept_id"].astype(str))
             missing = [d for d in DEFAULT_DEPTS if d not in existing]
-            if missing:
-                new_rows = []
-                for dept_id in missing:
-                    info = DEFAULT_DEPTS[dept_id]
-                    new_rows.append({
+            for dept_id in missing:
+                info = DEFAULT_DEPTS[dept_id]
+                try:
+                    append_row(SHEET_AUTH, {
                         "dept_id":   dept_id,
                         "dept_name": info["name"],
                         "pw_hash":   _hash(info["password"]),
                         "menus":     info["menus"],
                         "is_active": "TRUE",
                     })
-                merged = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
-                write_sheet(SHEET_AUTH, merged)
+                except Exception:
+                    pass
     except Exception:
         # quota exceeded หรือ network error — ใช้ DEFAULT_DEPTS แทน
         pass
@@ -252,8 +252,14 @@ def render_manage_passwords():
             st.error("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร")
         else:
             from modules.excel_db import update_row
-            update_row(SHEET_AUTH, "dept_id", sel_dept, {"pw_hash": _hash(new_pw)})
-            st.success(f"✅ เปลี่ยนรหัสผ่าน {dept_opts[sel_dept]} สำเร็จ")
+            try:
+                update_row(SHEET_AUTH, "dept_id", sel_dept, {"pw_hash": _hash(new_pw)})
+                st.success(f"✅ เปลี่ยนรหัสผ่าน {dept_opts[sel_dept]} สำเร็จ")
+            except Exception as e:
+                st.error("❌ บันทึกรหัสผ่านไม่สำเร็จ (ฐานข้อมูล)\n\n"
+                         f"รายละเอียด: `{e}`\n\n"
+                         "มักเกิดจากยังไม่ได้รัน SQL ล่าสุด หรือ schema cache ค้าง — "
+                         "ลองรัน `notify pgrst, 'reload schema';` ใน Supabase แล้วลองใหม่")
 
     # ══════════════════════════════════════════════════════════
     # จัดการรหัสผ่าน "สาขา" (แอปสาขา) — ใช้ตอนพนักงานลาออก ฯลฯ

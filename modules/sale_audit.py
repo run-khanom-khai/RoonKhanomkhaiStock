@@ -775,10 +775,10 @@ def _render_money_summary():
     pmap = _product_price_map()      # ราคาจากตารางสินค้า (อัตโนมัติ)
 
     # ── (ก) ขนมไข่ — คิดจากบรรจุภัณฑ์ที่ฝ่ายตรวจสอบนับ ──
-    st.markdown("#### 3.2 (ก) ขนมไข่ — จากบรรจุภัณฑ์ที่ฝ่ายตรวจสอบนับ")
+    st.markdown("#### (ก) ขนมไข่ — จากบรรจุภัณฑ์ที่ฝ่ายตรวจสอบนับ")
     st.caption("แต่ละช่องทาง = จำนวนบรรจุภัณฑ์ที่ใช้ไปของช่องทางนั้น · "
-               "ยอดเงิน(บาท) = ใช้จริง − (LineMan+Grab+Shopee+TikTok+อื่นๆ+ชำรุด) · "
-               "เป็นเงิน = ยอดเงิน(บาท) × ราคา")
+               "ยอดบรรจุภัณฑ์(หน่วย) = ใช้จริง − (LineMan+Grab+Shopee+TikTok+อื่นๆ+ชำรุด) · "
+               "ยอดเงิน(บาท) = ยอดบรรจุภัณฑ์(หน่วย) × ราคา")
     egg_money = 0.0
     no_money_total = 0.0     # ช่องทางไม่รับเงินที่ร้าน (ไม่รวมชำรุด)
     dmg_total = 0.0          # ชำรุด
@@ -816,7 +816,7 @@ def _render_money_summary():
     hdr = ("<tr>" + "".join(
         f"<th style='padding:6px;background:#6A1B9A;color:#fff;font-size:.85rem;'>{h}</th>"
         for h in (["บรรจุภัณฑ์", "ใช้จริง(ตรวจสอบ)"] + SALE_AUDIT_TABLE_CHANNELS
-                  + ["ยอดเงิน(บาท)", "ราคา", "เป็นเงิน"])) + "</tr>")
+                  + ["ยอดบรรจุภัณฑ์(หน่วย)", "ราคา", "ยอดเงิน(บาท)"])) + "</tr>")
     st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #ddd;font-size:.9rem;'>"
                 f"{hdr}{detail_rows}</table>", unsafe_allow_html=True)
 
@@ -836,7 +836,7 @@ def _render_money_summary():
                         pass
 
     # ── (ข) เครื่องดื่ม/รายการอื่น — แยกตามชนิดจากยอดขายที่บันทึก × ราคาในระบบ ──
-    st.markdown("#### 3.2 (ข) เครื่องดื่ม/รายการอื่น — แยกตามชนิด (จากยอดขายหน้าร้าน)")
+    st.markdown("#### (ข) เครื่องดื่ม/รายการอื่น — แยกตามชนิด (จากยอดขายหน้าร้าน)")
     st.caption("ดึงจำนวนขายแต่ละชนิดจากยอดขายที่บันทึก (ตัด Delivery/Online) × ราคาในระบบ")
     pinfo = _products_info()
     drink_qty = _drink_sales(branch_id, D)
