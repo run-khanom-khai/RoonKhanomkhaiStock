@@ -107,6 +107,28 @@ def render():
 # ══════════════════════════════════════════════════════════════════════
 # TAB 1 : จัดการพนักงาน
 # ══════════════════════════════════════════════════════════════════════
+# หัวตารางพนักงาน (ไทย) — ใช้แสดงผลเท่านั้น ไม่กระทบข้อมูลจริง
+EMP_TH_HEADERS = {
+    "employee_id": "รหัสพนักงาน", "first_name": "ชื่อ", "last_name": "นามสกุล",
+    "nickname": "ชื่อเล่น", "age": "อายุ", "birthdate": "วันเกิด", "education": "การศึกษา",
+    "position": "ตำแหน่ง", "salary": "เงินเดือน", "branch_id": "สาขา",
+    "start_date": "วันเริ่มงาน", "resign_date": "วันลาออก", "resign_reason": "เหตุผลลาออก",
+    "status": "สถานะ", "nationality": "สัญชาติ", "national_id": "เลขบัตรประชาชน",
+    "passport_no": "เลขพาสปอร์ต", "mou_no": "เลข MOU", "email": "อีเมล", "phone": "เบอร์โทร",
+    "bank_name": "ธนาคาร", "bank_branch": "สาขาธนาคาร", "bank_account_no": "เลขที่บัญชี",
+    "bank_account_name": "ชื่อบัญชี", "promptpay_no": "พร้อมเพย์",
+}
+
+
+def _emp_thai_display(df, branches=None):
+    """แปลงหัวตารางพนักงานเป็นภาษาไทย + แปลงรหัสสาขาเป็นชื่อสาขา (เฉพาะการแสดงผล)"""
+    d = df.copy()
+    if branches and "branch_id" in d.columns:
+        d["branch_id"] = d["branch_id"].map(
+            lambda b: f"{b} – {branches.get(str(b).strip(), '')}" if str(b).strip() else "")
+    return d.rename(columns={k: v for k, v in EMP_TH_HEADERS.items() if k in d.columns})
+
+
 def _render_employees():
     st.subheader("👤 จัดการพนักงาน")
     df = read_sheet(SHEET_EMPLOYEES)
@@ -123,7 +145,8 @@ def _render_employees():
         sort_cols = [c for c in ["branch_id", "first_name"] if c in df_show.columns]
         if sort_cols:
             df_show = df_show.sort_values(sort_cols, ignore_index=True)
-        st.dataframe(df_show, use_container_width=True)
+        st.dataframe(_emp_thai_display(df_show, branches),
+                     use_container_width=True, hide_index=True)
     else:
         st.info("ยังไม่มีข้อมูลพนักงาน")
 

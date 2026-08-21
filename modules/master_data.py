@@ -33,8 +33,12 @@ def _seed_product_types():
         ("ของฝาก", "ของฝาก", "TRUE"),
         ("อื่น ๆ", "อื่น ๆ", "TRUE"),
     ]
-    _seed_if_empty(SHEET_PRODUCT_TYPES,
-                   ["product_type_id", "product_type_name", "is_active"], data)
+    # กันหน้าแอปพัง ถ้ายังไม่ได้รัน SQL สร้างตาราง product_types
+    try:
+        _seed_if_empty(SHEET_PRODUCT_TYPES,
+                       ["product_type_id", "product_type_name", "is_active"], data)
+    except Exception:
+        pass
 
 
 def _product_type_options():
@@ -719,6 +723,10 @@ def _render_product_type_manager():
         cur = []
         if tdf is not None and not tdf.empty and "product_type_id" in tdf.columns:
             cur = [str(x).strip() for x in tdf["product_type_id"].tolist() if str(x).strip()]
+        if not cur:
+            st.warning("⚠️ ยังไม่มีตาราง/ข้อมูลประเภทสินค้า — กรุณารัน SQL "
+                       "`roon_master_bom.sql` (หรือ `roon_new_tables.sql`) ใน Supabase ก่อน "
+                       "แล้วเมนูนี้จะใช้งานได้ (ใช้ประเภทเริ่มต้น 4 อย่างไปก่อนได้)")
         st.caption("ประเภทปัจจุบัน: " + (", ".join(cur) if cur else "— ยังไม่มี —"))
 
         ta, tb = st.tabs(["➕ เพิ่มประเภท", "✏️ เปลี่ยนชื่อประเภท"])
