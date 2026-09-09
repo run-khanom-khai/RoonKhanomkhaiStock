@@ -270,39 +270,34 @@ def render():
     st.title("🛒 ฝ่ายจัดซื้อ (Purchase)")
     st.caption("จัดการชื่อวัตถุดิบ/บรรจุภัณฑ์ • บันทึกจัดซื้อ • เบิกเข้าสาขา • รายงานสต๊อกคงเหลือ")
 
-    tabs = st.tabs([
-        "🧾 ชื่อวัตถุดิบ/บรรจุภัณฑ์",   # บันทึก (เพิ่ม/แก้ไข/ลบ)
-        "📦 บันทึกการจัดซื้อ",          # บันทึก
-        "🚛 เบิกของเข้าสาขา",          # บันทึก
-        "📅 ดูรายการสั่งซื้อ",          # แสดงผล (ตามวันที่)
-        "🚚 ดูการเบิกเข้าสาขา (PDF)",   # แสดงผล (ตามวันที่) + PDF
-        "📊 รายงานสต๊อกคงเหลือ",       # แสดงผล (เตือน min สีแดง)
-        "🔴 วัตถุดิบถึงจุดสั่งซื้อ (PDF)",  # แสดงผล (เฉพาะที่ถึง min) + PDF
-        "🔧 ซ่อมบำรุงทรัพย์สิน",        # ทรัพย์สิน + ประวัติการซ่อม
-        "📈 รายงานสรุปสาขา (Excel)",    # รวมข้อมูลสาขา+ตรวจนับ ดาวน์โหลด Excel
-    ])
-    with tabs[0]:
-        _render_items_master()
-    with tabs[1]:
-        _render_purchase_form()
-    with tabs[2]:
-        _render_stock_in_form()
-    with tabs[3]:
-        _render_purchase_view()
-    with tabs[4]:
-        _render_stock_in_report()
-    with tabs[5]:
-        _render_stock_balance()
-    with tabs[6]:
-        _render_low_stock()
-    with tabs[7]:
-        _render_asset_maintenance()
-    with tabs[8]:
+    # ── เมนูแนวตั้งด้านซ้าย (รายงานสรุปสาขาอยู่ล่างสุด) ──
+    def _render_stock_report():
         try:
             from modules import stock_report
             stock_report.render()
         except Exception as e:
             st.error(f"❌ ไม่สามารถโหลดรายงานได้: {e}")
+
+    MENU = [
+        ("🧾 ชื่อวัตถุดิบ/บรรจุภัณฑ์", _render_items_master),
+        ("📦 บันทึกการจัดซื้อ",         _render_purchase_form),
+        ("🚛 เบิกของเข้าสาขา",          _render_stock_in_form),
+        ("📅 ดูรายการสั่งซื้อ",          _render_purchase_view),
+        ("🚚 ดูการเบิกเข้าสาขา (PDF)",  _render_stock_in_report),
+        ("📊 รายงานสต๊อกคงเหลือ",       _render_stock_balance),
+        ("🔴 วัตถุดิบถึงจุดสั่งซื้อ (PDF)", _render_low_stock),
+        ("🔧 ซ่อมบำรุงทรัพย์สิน",        _render_asset_maintenance),
+        ("📈 รายงานสรุปสาขาประจำวัน (Excel)", _render_stock_report),  # ← ล่างสุด
+    ]
+    labels = [m[0] for m in MENU]
+
+    left, right = st.columns([1, 4], gap="large")
+    with left:
+        st.markdown("**เมนูฝ่ายจัดซื้อ**")
+        choice = st.radio("เมนูฝ่ายจัดซื้อ", labels,
+                          label_visibility="collapsed", key="purchase_menu")
+    with right:
+        dict(MENU)[choice]()
 
 
 # ══════════════════════════════════════════════════════════════════════
