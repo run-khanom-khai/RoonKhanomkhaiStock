@@ -154,10 +154,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    selected_label = st.radio("เมนู", list(PURCHASE_MENU.keys()),
-                              label_visibility="collapsed")
-    st.divider()
-
     if st.button("🚪 ออกจากระบบ", use_container_width=True):
         _reset_session()
         st.rerun()
@@ -174,8 +170,7 @@ with st.sidebar:
 # ══════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════
-_module_path, _func_name = PURCHASE_MENU[selected_label]
-_run(_module_path, _func_name)
+_run("modules.purchase", "render")
 
 st.markdown(
     "<hr style='margin-top:40px;border:1px solid #eee;'>"

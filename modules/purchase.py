@@ -279,15 +279,15 @@ def render():
             st.error(f"❌ ไม่สามารถโหลดรายงานได้: {e}")
 
     MENU = [
-        ("🧾 ชื่อวัตถุดิบ/บรรจุภัณฑ์", _render_items_master),
-        ("📦 บันทึกการจัดซื้อ",         _render_purchase_form),
-        ("🚛 เบิกของเข้าสาขา",          _render_stock_in_form),
-        ("📅 ดูรายการสั่งซื้อ",          _render_purchase_view),
-        ("🚚 ดูการเบิกเข้าสาขา (PDF)",  _render_stock_in_report),
-        ("📊 รายงานสต๊อกคงเหลือ",       _render_stock_balance),
-        ("🔴 วัตถุดิบถึงจุดสั่งซื้อ (PDF)", _render_low_stock),
-        ("🔧 ซ่อมบำรุงทรัพย์สิน",        _render_asset_maintenance),
-        ("📈 รายงานสรุปสาขาประจำวัน (Excel)", _render_stock_report),  # ← ล่างสุด
+        ("🧾 เพิ่มวัตถุดิบ/บรรจุภัณฑ์",        _render_items_master),
+        ("📦 บันทึกการสั่งซื้อ",              _render_purchase_form),
+        ("📅 รายงานการสั่งซื้อ",              _render_purchase_view),
+        ("🚛 เบิกของเข้าสาขา",               _render_stock_in_form),
+        ("🚚 รายงานการเบิกของเข้าสาขา",       _render_stock_in_report),
+        ("📊 รายงานสต๊อกคงเหลือ",            _render_stock_balance),
+        ("🔴 รายงานจุด Minimum point",       _render_low_stock),
+        ("📈 รายงานสรุปสาขาประจำวัน",         _render_stock_report),
+        ("🔧 รายการซ่อมบำรุงทรัพย์สิน",       _render_asset_maintenance),
     ]
     labels = [m[0] for m in MENU]
 
