@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือส่งมอบระบบ ROON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&family=Prompt:wght@700;800&display=swap" rel="stylesheet">
+<style>
+ :root{--o:#E8752B;--o2:#C85A16;--ink:#2b2723;--paper:#FFF8EF;--card:#fff;--line:#eadfce;
+   --green:#2E7D32;--red:#C62828;--blue:#0D47A1;--gold:#B8860B;}
+ *{box-sizing:border-box;margin:0;padding:0}
+ body{background:var(--paper);color:var(--ink);font-family:"Sarabun","Segoe UI",Tahoma,sans-serif;line-height:1.62}
+ .page{max-width:940px;margin:0 auto;padding:10px 20px 40px}
+ .hero{background:linear-gradient(135deg,var(--o),var(--o2));color:#fff;border-radius:20px;
+   padding:26px 30px;margin:14px 0 20px;box-shadow:0 8px 26px rgba(200,90,22,.25)}
+ .hero h1{font-family:"Prompt",sans-serif;font-size:1.9rem;line-height:1.2}
+ .hero p{opacity:.95;margin-top:6px}
+ h2{font-family:"Prompt",sans-serif;color:var(--o2);font-size:1.4rem;margin:26px 0 10px;
+   border-left:6px solid var(--o);padding-left:12px}
+ h3{font-family:"Prompt",sans-serif;color:var(--ink);font-size:1.12rem;margin:16px 0 6px}
+ section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px;margin:14px 0;
+   box-shadow:0 3px 12px rgba(180,120,40,.06)}
+ table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.95rem}
+ th,td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+ th{background:var(--ink);color:#fff;font-family:"Prompt",sans-serif;font-weight:700}
+ tr:nth-child(even) td{background:#fdf7ee}
+ .best{background:#E8F5E9!important}
+ .tag{display:inline-block;background:var(--green);color:#fff;font-size:.75rem;padding:2px 10px;border-radius:20px;margin-left:6px}
+ .warn{background:#FFF3CD;border-left:5px solid var(--gold);border-radius:10px;padding:12px 16px;margin:12px 0}
+ .danger{background:#FFEBEE;border-left:5px solid var(--red);border-radius:10px;padding:12px 16px;margin:12px 0}
+ .ok{background:#E8F5E9;border-left:5px solid var(--green);border-radius:10px;padding:12px 16px;margin:12px 0}
+ ol,ul{margin:8px 0 8px 22px}
+ li{margin:6px 0}
+ .step{display:flex;gap:14px;align-items:flex-start;margin:14px 0}
+ .snum{flex:0 0 auto;width:34px;height:34px;border-radius:50%;background:var(--o);color:#fff;
+   font-family:"Prompt";font-weight:800;display:flex;align-items:center;justify-content:center}
+ .big{font-size:1.5rem;font-weight:800;color:var(--o2)}
+ .chk{list-style:none;margin-left:0}
+ .chk li{padding-left:30px;position:relative}
+ .chk li:before{content:"☐";position:absolute;left:0;font-size:1.2rem;color:var(--o)}
+ .foot{text-align:center;color:#a99;font-size:.82rem;margin-top:24px}
+ @media print{body{background:#fff}section{box-shadow:none;break-inside:avoid}.hero{box-shadow:none}}
+</style></head>
+<body><div class="page">
+
+<div class="hero">
+  <h1>🛒 คู่มือส่งมอบระบบ ROON ให้ใช้ระยะยาว</h1>
+  <p>เทียบค่าใช้จ่าย · ขั้นตอนย้ายขึ้นระบบ Managed (ไม่ต้องดูแล) · คู่มือส่งมอบให้ลูกชาย</p>
+  <p style="margin-top:8px;font-size:.9rem;opacity:.9">จัดทำโดย ดร.วรรณ (ดร.อภิวรรณ์ ดำแสงสวัสดิ์)</p>
+</div>
+
+<div class="ok"><b>เป้าหมาย:</b> ตั้งค่าครั้งเดียว แล้ว<strong>ส่งมอบให้ลูกชายใช้เองได้</strong> โดยแทบไม่ต้องดูแลเทคนิค —
+เหลือแค่ "จ่ายบิลรายเดือน + กดปุ่มเดียวถ้าต้อง restart"</div>
+
+<section>
+<h2>ส่วนที่ 1 · เทียบค่าใช้จ่าย (3 ทาง)</h2>
+<p>ระบบมี 2 ส่วนที่ต้องมี "ที่อยู่": <b>ฐานข้อมูล (Postgres)</b> และ <b>ตัวแอป (Streamlit)</b>.
+ทุกทางใช้ Postgres ฟรี (ไม่มีค่า license) เหมือนกัน — ต่างกันที่ "ใครดูแลเซิร์ฟเวอร์"</p>
+<table>
+<tr><th>ทาง</th><th>ค่าใช้จ่าย/เดือน</th><th>ใครดูแล</th><th>เหมาะกับ ดร.วรรณ ไหม</th></tr>
+<tr><td><b>A. ฟรีทั้งหมด</b><br>(Streamlit Cloud ฟรี + Supabase ฟรี)</td><td>0 บาท</td>
+  <td>อัตโนมัติ แต่<b>แอปหลับ</b>หลังไม่ใช้ ~12 ชม. + DB pause 1 สัปดาห์</td>
+  <td class="warn" style="border:0">พอใช้ทดลอง แต่ช้า/หลับ ไม่เหมาะใช้จริงจัง</td></tr>
+<tr class="best"><td><b>B. Managed จ่ายรายเดือน</b> <span class="tag">แนะนำ</span><br>(โฮสต์แอป + Supabase Pro)</td>
+  <td><b>~1,200 บาท</b> (~$35)</td>
+  <td><b>ผู้ให้บริการดูแลให้หมด</b> — backup อัตโนมัติ ไม่หลับ ไม่ต้องแตะเทคนิค</td>
+  <td class="ok" style="border:0"><b>ใช่ — เหมาะที่สุด</b> สำหรับส่งมอบให้คนไม่เทคนิค</td></tr>
+<tr><td><b>C. ติดตั้งเองบน VPS</b><br>(เช่าเซิร์ฟเวอร์ ลง Postgres เอง)</td><td>~200–400 บาท</td>
+  <td><b>ต้องดูแลเอง</b> — อัปเดต ความปลอดภัย ตั้ง backup เอง</td>
+  <td class="danger" style="border:0"><b>ไม่เหมาะ</b> ถูกสุดแต่ถ้าไม่มีคนดูแล เสี่ยงข้อมูลหาย/โดนแฮก</td></tr>
+</table>
+<div class="warn">💡 <b>ตัวคูณค่าใช้จ่ายที่สำคัญ:</b> ตอนนี้ระบบแยกเป็น <b>7 แอป</b> ถ้าโฮสต์แบบคิดต่อแอปจะแพงขึ้นหลายเท่า
+<b>→ ถ้ารวมเหลือ 1 แอป จะจ่ายค่าโฮสต์แค่ก้อนเดียว</b> (ดูส่วนที่ 4)</div>
+<p style="font-size:.85rem;color:#888">* ราคาโดยประมาณ ณ ปี 2026 — ควรตรวจสอบราคาจริงตอนสมัครอีกครั้ง</p>
+</section>
+
+<section>
+<h2>ส่วนที่ 2 · ขั้นตอนย้ายขึ้นระบบ Managed (ทีละขั้น)</h2>
+<div class="step"><div class="snum">1</div><div><b>รวม 7 แอป → 1 แอป ก่อน</b> (ให้น้องเก่งทำให้) — เพื่อให้เหลือของที่ต้องโฮสต์แค่ชิ้นเดียว ถูกและง่ายกว่ามาก</div></div>
+<div class="step"><div class="snum">2</div><div><b>อัปเกรด Supabase เป็นแผน Pro</b> — เข้า supabase.com → โปรเจกต์ ROON → Settings → Billing → เลือก Pro (~$25/เดือน) → เปิดใช้ <b>Daily Backups</b> (backup อัตโนมัติทุกวัน)</div></div>
+<div class="step"><div class="snum">3</div><div><b>สมัครโฮสต์แอปแบบไม่หลับ</b> (เช่น Render หรือ Railway) → เชื่อมกับ GitHub repo เดิม → ตั้งค่า Secrets (คีย์ Supabase) เหมือนที่ตั้งใน Streamlit → Deploy</div></div>
+<div class="step"><div class="snum">4</div><div><b>ทดสอบให้ครบ</b> — ล็อกอินทุกแผนก บันทึกข้อมูลจริง 2–3 วัน ดูว่าไม่หลับ + เร็วขึ้น</div></div>
+<div class="step"><div class="snum">5</div><div><b>ผูกบัตร/ตั้งจ่ายอัตโนมัติ</b> ทั้ง Supabase และโฮสต์แอป เพื่อไม่ให้ระบบสะดุดเพราะลืมจ่าย</div></div>
+<div class="ok">✅ เสร็จแล้วระบบจะ <b>เปิดตลอด 24 ชม. · เร็วขึ้น · backup ข้อมูลอัตโนมัติทุกวัน</b> โดยไม่ต้องดูแลเทคนิค</div>
+</section>
+
+<section>
+<h2>ส่วนที่ 3 · คู่มือส่งมอบให้ลูกชาย (First)</h2>
+<p>สิ่งที่ลูกชายต้องรู้มีแค่นี้ — ไม่ต้องเขียนโปรแกรมเป็น:</p>
+<h3>🔑 การเข้าใช้งานประจำวัน</h3>
+<ul><li>เปิดลิงก์แอป (บุ๊กมาร์กไว้) → ล็อกอินด้วยรหัสแผนกของตัวเอง → ใช้งานได้เลย</li>
+<li>พนักงานแต่ละแผนกมีรหัสของตัวเอง (ดูจากคู่มือรหัสผ่าน)</li></ul>
+<h3>💳 บิลรายเดือน (สำคัญ — อย่าให้ขาด)</h3>
+<ul><li>Supabase (ฐานข้อมูล) ~$25 · โฮสต์แอป ~$7–10 — ตั้งตัดบัตรอัตโนมัติไว้</li>
+<li>ถ้าบัตรมีปัญหา บริการจะส่งอีเมลเตือน → ต้องรีบอัปเดตบัตร ไม่งั้นระบบหยุด</li></ul>
+<h3>🔄 ถ้าแอปช้า/ค้าง (แก้เองได้)</h3>
+<ul><li>เข้าหน้าจัดการแอป (Render/Railway) → กดปุ่ม <b>Restart / Reboot</b> → รอ 1–2 นาที</li>
+<li>ยังไม่หาย → ดูส่วน "ติดต่อใคร" ด้านล่าง</li></ul>
+<h3>💾 ข้อมูลปลอดภัยแค่ไหน</h3>
+<ul><li>Supabase Pro <b>backup อัตโนมัติทุกวัน</b> — ถ้าข้อมูลผิดพลาด กู้คืนย้อนหลังได้</li>
+<li>ไม่ต้องทำ backup เอง</li></ul>
+<h3>📞 ถ้ามีปัญหาที่แก้เองไม่ได้ (ติดต่อใคร)</h3>
+<div class="chk"><ul class="chk">
+<li>ผู้ดูแลระบบ / ผู้พัฒนา: __________________ (เบอร์/ไลน์: __________)</li>
+<li>บัญชี GitHub (เก็บโค้ด): user __________ / รหัส __________</li>
+<li>บัญชี Supabase: อีเมล __________</li>
+<li>บัญชีโฮสต์แอป (Render/Railway): อีเมล __________</li>
+</ul></div>
+<div class="warn">🔐 <b>เก็บรหัสผ่านทั้งหมดไว้ที่เดียว</b> (สมุด/ไฟล์ที่ปลอดภัย) และบอกให้ลูกชายรู้ว่าเก็บไว้ที่ไหน</div>
+</section>
+
+<section>
+<h2>ส่วนที่ 4 · แผน "รวม 7 แอป → 1 แอป" (งานถัดไป)</h2>
+<p>ทำไมต้องรวม: เหลือ <b>1 URL · 1 ที่ต้องดูแล · ค่าโฮสต์ก้อนเดียว</b> → ง่ายและถูกที่สุดสำหรับส่งมอบ</p>
+<p>หลักการ: แอปเดียว พอล็อกอินด้วยรหัสแผนกไหน ระบบจะ<b>แสดงเฉพาะเมนูของแผนกนั้น</b>
+(บัญชี/จัดซื้อ/ผลิต/ตรวจสอบ/สาขา/Sale Audit/ผู้บริหาร) — โค้ดเดิมใช้ต่อได้เกือบทั้งหมด แค่รวมทางเข้า</p>
+<div class="ok">น้องเก่งจะทำส่วนนี้ให้เป็นสเต็ปถัดไป (แยกทำเพื่อความรอบคอบ ทดสอบทุกแผนกก่อนส่งมอบ)</div>
+</section>
+
+<p class="foot">ROON KHANOMKHAI Management System · คู่มือส่งมอบระบบ · จัดทำโดย ดร.วรรณ · 2026</p>
+</div></body></html>

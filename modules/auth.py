@@ -153,10 +153,12 @@ def get_allowed_menus(dept_id: str) -> list:
 # ══════════════════════════════════════════════════════════════
 def render_login(logo_b64: str = "",
                  app_title: str = "🥚 ระบบการบริหารจัดการร้านรุนขนมไข่",
-                 subtitle: str = "รุนขนมไข่ไส้เนย สงขลา — กรุณาเข้าสู่ระบบ"):
+                 subtitle: str = "รุนขนมไข่ไส้เนย สงขลา — กรุณาเข้าสู่ระบบ",
+                 exclude_depts=None):
     """แสดงหน้า Login — return True ถ้า login สำเร็จ
 
     app_title : ชื่อ app ตัวใหญ่บนหน้า Login (แต่ละ app ส่งชื่อของตัวเอง)
+    exclude_depts : list รหัสแผนกที่ไม่ต้องการให้เลือกในหน้านี้ (เช่น ['branch'])
     """
     # Header
     if logo_b64:
@@ -177,6 +179,9 @@ def render_login(logo_b64: str = "",
     if not df.empty:
         active = df[df["is_active"].astype(str) == "TRUE"]
         dept_opts = dict(zip(active["dept_id"], active["dept_name"]))
+    # ตัดแผนกที่ไม่ต้องการออกจากรายการ (เช่น 'branch' — พนักงานสาขาต้องใช้แท็บสาขา)
+    if exclude_depts:
+        dept_opts = {k: v for k, v in dept_opts.items() if k not in exclude_depts}
 
     st.divider()
     col1, col2, col3 = st.columns([1, 2, 1])
