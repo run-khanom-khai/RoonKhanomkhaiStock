@@ -279,6 +279,7 @@ def render():
         "📊 รายงานสต๊อกคงเหลือ",       # แสดงผล (เตือน min สีแดง)
         "🔴 วัตถุดิบถึงจุดสั่งซื้อ (PDF)",  # แสดงผล (เฉพาะที่ถึง min) + PDF
         "🔧 ซ่อมบำรุงทรัพย์สิน",        # ทรัพย์สิน + ประวัติการซ่อม
+        "📈 รายงานสรุปสาขา (Excel)",    # รวมข้อมูลสาขา+ตรวจนับ ดาวน์โหลด Excel
     ])
     with tabs[0]:
         _render_items_master()
@@ -296,6 +297,12 @@ def render():
         _render_low_stock()
     with tabs[7]:
         _render_asset_maintenance()
+    with tabs[8]:
+        try:
+            from modules import stock_report
+            stock_report.render()
+        except Exception as e:
+            st.error(f"❌ ไม่สามารถโหลดรายงานได้: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════
