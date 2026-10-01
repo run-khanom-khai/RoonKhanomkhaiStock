@@ -36,12 +36,34 @@ def _get_client() -> Client:
 
 
 def read_sheet(table_name: str) -> pd.DataFrame:
-    """อ่านข้อมูลจาก Supabase table"""
+    """อ่านข้อมูลจาก Supabase table — ดึงครบ 'ทุกแถว'
+
+    ⚠️ สำคัญมาก (แก้บั๊ก DV1397 duplicate key):
+    PostgREST/Supabase จำกัดการอ่าน select("*") ไว้สูงสุด ~1000 แถวต่อครั้ง
+    ตารางที่มีมากกว่า 1000 แถว (เช่น branch_sales_delivery) จะอ่านได้ไม่ครบ
+    ทำให้ระบบมองไม่เห็นเลขล่าสุด → สร้างรหัสซ้ำ (เช่น DV1397 ซ้ำ)
+    จึงต้องวนอ่านทีละหน้า (pagination) ด้วย .range() จนครบทุกแถว
+    """
     try:
         client = _get_client()
-        res = client.table(table_name).select("*").execute()
-        if res.data:
-            return pd.DataFrame(res.data).fillna("")
+        page_size = 1000
+        start = 0
+        all_rows = []
+        while True:
+            res = (
+                client.table(table_name)
+                .select("*")
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            batch = res.data or []
+            all_rows.extend(batch)
+            # ถ้าได้น้อยกว่าเต็มหน้า แปลว่าหมดแล้ว
+            if len(batch) < page_size:
+                break
+            start += page_size
+        if all_rows:
+            return pd.DataFrame(all_rows).fillna("")
         return pd.DataFrame()
     except Exception:
         return pd.DataFrame()

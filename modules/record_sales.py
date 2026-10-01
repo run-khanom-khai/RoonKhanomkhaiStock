@@ -33,6 +33,7 @@ from config import (
 )
 from modules.excel_db import (
     read_sheet, write_sheet, init_workbook, append_row, update_row, delete_row,
+    append_row_with_auto_id,
 )
 from utils.id_generator import next_id
 
@@ -418,11 +419,9 @@ def _save_front_products(front_products, branch_id, sale_id):
         if _int(qty) <= 0:
             continue
         try:
-            fdf = read_sheet(SHEET_BRANCH_FRONT_PRODUCTS)
-            fid = next_id(fdf, "id", "FP")
-            append_row(SHEET_BRANCH_FRONT_PRODUCTS, {
-                "id": fid, "sale_id": sale_id, "branch_id": branch_id,
-                "product_id": pid, "qty": _int(qty)})
+            append_row_with_auto_id(SHEET_BRANCH_FRONT_PRODUCTS, {
+                "sale_id": sale_id, "branch_id": branch_id,
+                "product_id": pid, "qty": _int(qty)}, "id", "FP")
         except Exception:
             pass
 
@@ -461,16 +460,13 @@ def _save_slips(uploaded_files, branch_id, sale_id, existing=0):
     for uf in uploaded_files[:max(0, room)]:
         try:
             b64 = _encode_image(uf)
-            sdf = read_sheet(SHEET_BRANCH_SALES_SLIPS)
-            sid = next_id(sdf, "id", "SLP")
-            append_row(SHEET_BRANCH_SALES_SLIPS, {
-                "id":          sid,
+            append_row_with_auto_id(SHEET_BRANCH_SALES_SLIPS, {
                 "sale_id":     sale_id,
                 "branch_id":   branch_id,
                 "filename":    getattr(uf, "name", "slip.jpg"),
                 "image_b64":   b64,
                 "uploaded_at": uploaded_at,
-            })
+            }, "id", "SLP")
             saved += 1
         except Exception:
             pass
@@ -1033,70 +1029,98 @@ def _delivery_row_dict(did, sale_id, branch_id, r):
     return d
 
 
+def _cleanup_failed_sale(sale_id):
+    """ยกเลิกข้อมูลที่อาจค้างไว้ เมื่อการบันทึกล้มเหลวกลางคัน
+    (กันข้อมูลขายค้างครึ่งรายการ และกันการกดบันทึกซ้ำแล้วเกิดบิลซ้ำ)"""
+    if not sale_id:
+        return
+    # คืนคูปองให้กลับมาใช้ได้ก่อน (ต้องทำก่อนลบ mapping)
+    try:
+        _release_coupons(sale_id)
+    except Exception:
+        pass
+    # ลบรายการลูกทั้งหมดที่ผูกกับบิลนี้ (คูปอง/สลิป/delivery/สินค้าหน้าร้าน)
+    try:
+        _delete_children(sale_id)
+    except Exception:
+        pass
+    # ลบหัวบิลขาย
+    try:
+        delete_row(SHEET_BRANCH_SALES, "sale_id", sale_id)
+    except Exception:
+        pass
+
+
 def _save_new(**kw):
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    sales_df = read_sheet(SHEET_BRANCH_SALES)
-    sale_id = next_id(sales_df, "sale_id", "SAL")
+    sale_id = None
+    n_slip = 0
+    try:
+        _lo = kw.get("leftover", {}) or {}
+        # บันทึกหัวบิลขาย — ใช้ตัวสร้างรหัสแบบกันซ้ำ (อ่านครบทุกแถว + ลองใหม่ถ้าชน)
+        sale_id = append_row_with_auto_id(SHEET_BRANCH_SALES, {
+            "sale_date":       kw["sale_date"],
+            "branch_id":       kw["branch_id"],
+            "cash_amount":     kw["cash_amount"],
+            "transfer_amount": kw["transfer_amount"],
+            "coupon_amount":   kw["coupon_amount"],
+            "total_amount":    kw["total_amount"],
+            "eggs_used":                 _lo.get("eggs_used", 0),
+            "flour_finished_big_used":   _lo.get("flour_finished_big_used", 0),
+            "flour_finished_small_used": _lo.get("flour_finished_small_used", 0),
+            "mix_big_used":              _lo.get("mix_big_used", 0),
+            "mix_small_used":            _lo.get("mix_small_used", 0),
+            "batter_mismatch_reason":    _lo.get("batter_mismatch_reason", ""),
+            "leftover_box_qty":      _lo.get("leftover_box_qty", 0),
+            "leftover_loose_pieces": _lo.get("leftover_loose_pieces", 0),
+            "leftover_total_pieces": _lo.get("leftover_total_pieces", 0),
+            "box_unit_price":        _lo.get("box_unit_price", 0),
+            "leftover_value":        _lo.get("leftover_value", 0),
+            "egg_damage_qty":        _lo.get("egg_damage_qty", 0),
+            "egg_damage_photo":      _lo.get("egg_damage_photo", ""),
+            "flour_damage_qty":      _lo.get("flour_damage_qty", 0),
+            "flour_damage_photo":    _lo.get("flour_damage_photo", ""),
+            "leftover_damage_qty":   _lo.get("leftover_damage_qty", 0),
+            "leftover_damage_photo": _lo.get("leftover_damage_photo", ""),
+            "drink_damage_qty":      _lo.get("drink_damage_qty", 0),
+            "drink_damage_photo":    _lo.get("drink_damage_photo", ""),
+            "remark":          kw["remark"],
+            "status":          "submitted",
+            "created_at":      now,
+            "updated_at":      now,
+        }, "sale_id", "SAL")
 
-    _lo = kw.get("leftover", {}) or {}
-    append_row(SHEET_BRANCH_SALES, {
-        "sale_id":         sale_id,
-        "sale_date":       kw["sale_date"],
-        "branch_id":       kw["branch_id"],
-        "cash_amount":     kw["cash_amount"],
-        "transfer_amount": kw["transfer_amount"],
-        "coupon_amount":   kw["coupon_amount"],
-        "total_amount":    kw["total_amount"],
-        "eggs_used":                 _lo.get("eggs_used", 0),
-        "flour_finished_big_used":   _lo.get("flour_finished_big_used", 0),
-        "flour_finished_small_used": _lo.get("flour_finished_small_used", 0),
-        "mix_big_used":              _lo.get("mix_big_used", 0),
-        "mix_small_used":            _lo.get("mix_small_used", 0),
-        "batter_mismatch_reason":    _lo.get("batter_mismatch_reason", ""),
-        "leftover_box_qty":      _lo.get("leftover_box_qty", 0),
-        "leftover_loose_pieces": _lo.get("leftover_loose_pieces", 0),
-        "leftover_total_pieces": _lo.get("leftover_total_pieces", 0),
-        "box_unit_price":        _lo.get("box_unit_price", 0),
-        "leftover_value":        _lo.get("leftover_value", 0),
-        "egg_damage_qty":        _lo.get("egg_damage_qty", 0),
-        "egg_damage_photo":      _lo.get("egg_damage_photo", ""),
-        "flour_damage_qty":      _lo.get("flour_damage_qty", 0),
-        "flour_damage_photo":    _lo.get("flour_damage_photo", ""),
-        "leftover_damage_qty":   _lo.get("leftover_damage_qty", 0),
-        "leftover_damage_photo": _lo.get("leftover_damage_photo", ""),
-        "drink_damage_qty":      _lo.get("drink_damage_qty", 0),
-        "drink_damage_photo":    _lo.get("drink_damage_photo", ""),
-        "remark":          kw["remark"],
-        "status":          "submitted",
-        "created_at":      now,
-        "updated_at":      now,
-    })
+        # คูปอง
+        for c in kw["valid_coupons"]:
+            append_row_with_auto_id(SHEET_BRANCH_SALES_COUPONS, {
+                "sale_id":   sale_id,
+                "branch_id": kw["branch_id"],
+                "coupon_no": c["coupon_no"],
+                "amount":    c["amount"],
+            }, "id", "SC")
+        _mark_coupons_used(kw["valid_coupons"], kw["branch_id"], sale_id)
 
-    # คูปอง
-    for c in kw["valid_coupons"]:
-        cdf = read_sheet(SHEET_BRANCH_SALES_COUPONS)
-        cid = next_id(cdf, "id", "SC")
-        append_row(SHEET_BRANCH_SALES_COUPONS, {
-            "id":        cid,
-            "sale_id":   sale_id,
-            "branch_id": kw["branch_id"],
-            "coupon_no": c["coupon_no"],
-            "amount":    c["amount"],
-        })
-    _mark_coupons_used(kw["valid_coupons"], kw["branch_id"], sale_id)
+        # Delivery
+        for r in kw["delivery_rows"]:
+            append_row_with_auto_id(
+                SHEET_BRANCH_SALES_DELIVERY,
+                _delivery_row_dict("", sale_id, kw["branch_id"], r),
+                "id", "DV")
 
-    # Delivery
-    for r in kw["delivery_rows"]:
-        ddf = read_sheet(SHEET_BRANCH_SALES_DELIVERY)
-        did = next_id(ddf, "id", "DV")
-        append_row(SHEET_BRANCH_SALES_DELIVERY,
-                   _delivery_row_dict(did, sale_id, kw["branch_id"], r))
+        # ยอดขายตามประเภทสินค้า (หน้าร้าน)
+        _save_front_products(kw.get("front_products"), kw["branch_id"], sale_id)
 
-    # ยอดขายตามประเภทสินค้า (หน้าร้าน)
-    _save_front_products(kw.get("front_products"), kw["branch_id"], sale_id)
-
-    # สลิป
-    n_slip = _save_slips(kw["slip_files"], kw["branch_id"], sale_id, existing=0)
+        # สลิป
+        n_slip = _save_slips(kw["slip_files"], kw["branch_id"], sale_id, existing=0)
+    except Exception as e:
+        _cleanup_failed_sale(sale_id)
+        st.error(
+            "❌ บันทึกไม่สำเร็จ — ระบบได้ยกเลิกข้อมูลที่ค้างให้เรียบร้อยแล้ว\n\n"
+            "กรุณากดบันทึกใหม่อีกครั้ง (ข้อมูลจะไม่ซ้ำ)"
+        )
+        with st.expander("🔍 รายละเอียดข้อผิดพลาด (สำหรับผู้ดูแลระบบ)"):
+            st.code(str(e))
+        return
 
     st.success(
         f"✅ บันทึกสำเร็จ! เลขที่: **{sale_id}** | วันที่ {kw['sale_date']} | "
@@ -1153,12 +1177,10 @@ def _save_edit(**kw):
     except Exception:
         pass
     for c in kw["valid_coupons"]:
-        cdf = read_sheet(SHEET_BRANCH_SALES_COUPONS)
-        cid = next_id(cdf, "id", "SC")
-        append_row(SHEET_BRANCH_SALES_COUPONS, {
-            "id": cid, "sale_id": sale_id, "branch_id": kw["branch_id"],
+        append_row_with_auto_id(SHEET_BRANCH_SALES_COUPONS, {
+            "sale_id": sale_id, "branch_id": kw["branch_id"],
             "coupon_no": c["coupon_no"], "amount": c["amount"],
-        })
+        }, "id", "SC")
     _mark_coupons_used(kw["valid_coupons"], kw["branch_id"], sale_id)
 
     # Delivery: ลบเดิม → ใส่ใหม่
@@ -1170,10 +1192,10 @@ def _save_edit(**kw):
     except Exception:
         pass
     for r in kw["delivery_rows"]:
-        ddf = read_sheet(SHEET_BRANCH_SALES_DELIVERY)
-        did = next_id(ddf, "id", "DV")
-        append_row(SHEET_BRANCH_SALES_DELIVERY,
-                   _delivery_row_dict(did, sale_id, kw["branch_id"], r))
+        append_row_with_auto_id(
+            SHEET_BRANCH_SALES_DELIVERY,
+            _delivery_row_dict("", sale_id, kw["branch_id"], r),
+            "id", "DV")
 
     # ยอดขายตามประเภทสินค้า (หน้าร้าน)
     _save_front_products(kw.get("front_products"), kw["branch_id"], sale_id)

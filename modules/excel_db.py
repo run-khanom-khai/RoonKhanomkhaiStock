@@ -187,6 +187,38 @@ def append_row(sheet_name: str, row_dict: dict):
     else:
         _local.append_row(sheet_name, row_dict)
 
+def append_row_with_auto_id(sheet_name: str, row_dict: dict, id_col: str,
+                            prefix: str = "", max_retries: int = 30):
+    """เพิ่มแถวใหม่พร้อม 'สร้างรหัสอัตโนมัติแบบกันซ้ำ'
+
+    ใช้แก้บั๊กรหัสซ้ำ (เช่น DV1397) ให้ครบวงจร:
+      1) อ่านข้อมูลครบทุกแถว (read_sheet ทำ pagination แล้ว) → หาเลขถัดไป
+      2) บันทึก ถ้า 'ชนรหัสซ้ำ' (duplicate key / 23505 / already exists)
+         จะอ่านใหม่แล้วลองเลขถัดไป จนสำเร็จ
+         (กันกรณีหลายสาขากดบันทึกพร้อมกันในวินาทีเดียว)
+    คืนค่า: รหัสที่บันทึกได้จริง
+    """
+    from utils.id_generator import next_id
+    last_err = None
+    for _ in range(max_retries):
+        df = read_sheet(sheet_name)
+        new_id = next_id(df, id_col, prefix)
+        row = dict(row_dict)
+        row[id_col] = new_id
+        try:
+            append_row(sheet_name, row)
+            return new_id
+        except Exception as e:
+            msg = str(e).lower()
+            if any(k in msg for k in ("duplicate", "23505", "already exists")):
+                last_err = e
+                continue  # รหัสชน → อ่านใหม่แล้วลองเลขถัดไป
+            raise
+    if last_err:
+        raise last_err
+    raise RuntimeError(f"สร้างรหัสใหม่สำหรับ {sheet_name} ไม่สำเร็จ")
+
+
 def update_row(sheet_name: str, id_col: str, id_value: str, updated_dict: dict):
     if _use_supabase():
         import supabase_db as sb

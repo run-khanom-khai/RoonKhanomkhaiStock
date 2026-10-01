@@ -1,0 +1,123 @@
+<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือขึ้น Cloud ROON</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&family=Prompt:wght@700;800&display=swap" rel="stylesheet">
+<style>
+ :root{--o:#E8752B;--o2:#C85A16;--ink:#2b2723;--paper:#FFF8EF;--card:#fff;--line:#eadfce;
+  --green:#2E7D32;--red:#C62828;--blue:#0D47A1;--sbg:#3ECF8E;--rnd:#5b47fb;}
+ *{box-sizing:border-box;margin:0;padding:0}
+ body{background:var(--paper);color:var(--ink);font-family:"Sarabun","Segoe UI",Tahoma,sans-serif;line-height:1.6}
+ .page{max-width:900px;margin:0 auto;padding:10px 20px 40px}
+ .hero{background:linear-gradient(135deg,var(--o),var(--o2));color:#fff;border-radius:20px;padding:24px 28px;margin:14px 0 18px}
+ .hero h1{font-family:"Prompt";font-size:1.8rem;line-height:1.2}
+ .hero p{opacity:.95;margin-top:6px}
+ h2{font-family:"Prompt";color:#fff;font-size:1.3rem;padding:12px 18px;border-radius:12px 12px 0 0;margin-top:24px}
+ .partA h2{background:var(--sbg)} .partB h2{background:var(--rnd)} .partC h2{background:var(--o)}
+ section{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:16px 0;overflow:hidden;
+   box-shadow:0 3px 12px rgba(180,120,40,.06)}
+ .body{padding:8px 22px 18px}
+ .step{display:flex;gap:14px;align-items:flex-start;margin:16px 0}
+ .snum{flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:var(--o);color:#fff;font-family:"Prompt";font-weight:800;
+   display:flex;align-items:center;justify-content:center}
+ .partA .snum{background:var(--sbg)} .partB .snum{background:var(--rnd)}
+ .mock{background:#f4f4f8;border:1px solid #d7d7e2;border-radius:10px;padding:12px 14px;margin:8px 0}
+ .mock .win{background:#fff;border:1px solid #ddd;border-radius:8px;overflow:hidden}
+ .mock .bar{background:#ecebf3;padding:6px 10px;font-size:.8rem;color:#666;border-bottom:1px solid #ddd}
+ .mock .content{padding:12px}
+ .field{margin:8px 0}
+ .field .lbl{font-size:.8rem;color:#888;margin-bottom:2px}
+ .field .inp{border:1px solid #cfcfe0;border-radius:6px;padding:8px 10px;background:#fbfbff;font-family:monospace;font-size:.86rem;word-break:break-all}
+ .btn{display:inline-block;background:var(--rnd);color:#fff;padding:7px 16px;border-radius:8px;font-weight:700;font-size:.85rem;margin-top:6px}
+ .partA .btn{background:var(--sbg)}
+ code{background:#fff3cd;color:#7a4a12;padding:2px 8px;border-radius:6px;font-family:monospace;font-size:.9em;word-break:break-all}
+ .copy{background:#2b2723;color:#fff;padding:10px 12px;border-radius:8px;font-family:monospace;font-size:.85rem;word-break:break-all;margin:6px 0}
+ .warn{background:#FFF3CD;border-left:5px solid #B8860B;border-radius:10px;padding:12px 14px;margin:12px 0}
+ .ok{background:#E8F5E9;border-left:5px solid var(--green);border-radius:10px;padding:12px 14px;margin:12px 0}
+ .danger{background:#FFEBEE;border-left:5px solid var(--red);border-radius:10px;padding:12px 14px;margin:12px 0}
+ table{width:100%;border-collapse:collapse;margin:10px 0;font-size:.92rem}
+ th,td{border:1px solid var(--line);padding:9px 11px;text-align:left}
+ th{background:var(--ink);color:#fff}
+ .foot{text-align:center;color:#a99;font-size:.8rem;margin-top:22px}
+ .pill{display:inline-block;background:#eee;border-radius:20px;padding:2px 10px;font-size:.8rem;margin:2px}
+ @media print{body{background:#fff}section{box-shadow:none;break-inside:avoid}}
+</style></head><body><div class="page">
+
+<div class="hero">
+<h1>☁️ คู่มือขึ้น Cloud ระบบ ROON (ทีละขั้น)</h1>
+<p>ให้ระบบอยู่บนเน็ตตลอด ไม่หลับ · พนักงานเปิดใช้ผ่าน "ลิงก์" · ไม่ต้องดูแลเทคนิค</p>
+</div>
+
+<div class="ok"><b>ต้องเช่า 2 อย่าง:</b> ① <b>Supabase Pro</b> (ฐานข้อมูล + backup อัตโนมัติ ~$25/เดือน) และ
+② <b>Render</b> (ที่รันแอป ไม่หลับ ~$7/เดือน) · รวม ~$32/เดือน (~1,100 บาท)</div>
+
+<div class="warn">💳 <b>น้องเก่งกรอกบัตร/สมัครแทนไม่ได้</b> (เพื่อความปลอดภัยของบัตร ดร.วรรณ) — คู่มือนี้ให้ ดร.วรรณ กดตามเองทีละขั้น
+ตรงช่องกรอกบัตรให้ ดร.วรรณ พิมพ์เอง · ที่เหลือน้องเก่งบอกให้กดตรงไหนหมดแล้ว</div>
+
+<div class="warn">🖼️ ภาพในคู่มือนี้เป็น <b>"ภาพจำลอง"</b> ให้เห็นว่าหน้าตาประมาณไหน/ต้องกรอกอะไร (ของจริงบนเว็บอาจต่างเล็กน้อย แต่ปุ่มจะชื่อเดียวกัน)</div>
+
+<!-- PART A -->
+<section class="partA"><h2>ส่วน A · อัปเกรด Supabase เป็น Pro (ฐานข้อมูล + backup)</h2><div class="body">
+<div class="step"><div class="snum">1</div><div>เปิด <b>supabase.com</b> → กด <b>Sign in</b> เข้าด้วยบัญชีเดิมที่มีโปรเจกต์ ROON อยู่</div></div>
+<div class="step"><div class="snum">2</div><div>คลิกเข้า <b>โปรเจกต์ ROON</b> → เมนูซ้ายล่าง <b>Settings ⚙️</b></div></div>
+<div class="step"><div class="snum">3</div><div>เลือก <b>Billing</b> (หรือ Subscription) → กด <b>Upgrade to Pro</b>
+<div class="mock"><div class="win"><div class="bar">supabase.com · Settings › Billing</div><div class="content">
+<span class="pill">Free (ปัจจุบัน)</span> <span class="pill" style="background:#3ECF8E;color:#fff">✔ Pro ~$25/mo</span>
+<div class="btn">Upgrade to Pro</div></div></div></div></div></div>
+<div class="step"><div class="snum">4</div><div>กรอกบัตรเครดิต/เดบิต (👉 <b>ดร.วรรณ พิมพ์เอง</b>) → ยืนยัน</div></div>
+<div class="step"><div class="snum">5</div><div>เปิด backup อัตโนมัติ: <b>Database → Backups</b> → ดูว่ามี <b>Daily backups</b> เปิดอยู่ (แผน Pro จะมีให้อัตโนมัติ)</div></div>
+<div class="ok">✅ เสร็จส่วน A: ฐานข้อมูลไม่หลับแล้ว + สำรองข้อมูลให้ทุกวัน</div>
+</div></section>
+
+<!-- PART B -->
+<section class="partB"><h2>ส่วน B · เอาแอป roon_app ขึ้น Render (ที่รันแอป ไม่หลับ)</h2><div class="body">
+<div class="step"><div class="snum">1</div><div>เปิด <b>render.com</b> → <b>Get Started / Sign up</b> → เลือก <b>Sign in with GitHub</b> (ใช้บัญชี GitHub เดียวกับที่เก็บโค้ด ROON) → กด Authorize</div></div>
+<div class="step"><div class="snum">2</div><div>ที่หน้า Dashboard กด <b>New +</b> → เลือก <b>Web Service</b>
+<div class="mock"><div class="win"><div class="bar">dashboard.render.com</div><div class="content"><span class="btn">+ New</span> → <span class="pill">Web Service</span></div></div></div></div></div>
+<div class="step"><div class="snum">3</div><div>เลือก repo <b>RoonKhanomkhaiStock</b> → กด <b>Connect</b></div></div>
+<div class="step"><div class="snum">4</div><div>กรอกค่าตั้งค่า (คัดลอกตามนี้เป๊ะๆ):
+<div class="mock"><div class="win"><div class="bar">Render · Create Web Service</div><div class="content">
+<div class="field"><div class="lbl">Name (จะกลายเป็นลิงก์)</div><div class="inp">roon-app</div></div>
+<div class="field"><div class="lbl">Branch</div><div class="inp">main</div></div>
+<div class="field"><div class="lbl">Build Command</div><div class="inp">pip install -r requirements.txt</div></div>
+<div class="field"><div class="lbl">Start Command</div><div class="inp">streamlit run roon_app.py --server.port $PORT --server.address 0.0.0.0</div></div>
+<div class="field"><div class="lbl">Instance Type (แผน)</div><div class="inp">Starter — $7/mo  (สำคัญ! ห้ามเลือก Free เพราะ Free จะหลับ)</div></div>
+</div></div></div>
+คัดลอก Start Command ไปวางได้เลย:
+<div class="copy">streamlit run roon_app.py --server.port $PORT --server.address 0.0.0.0</div>
+</div></div>
+<div class="step"><div class="snum">5</div><div><b>ใส่รหัสต่อฐานข้อมูล (Secret File)</b> — เลื่อนหา <b>Advanced → Secret Files</b> → Add Secret File:
+<div class="mock"><div class="win"><div class="bar">Render · Secret Files</div><div class="content">
+<div class="field"><div class="lbl">Filename (พิมพ์ให้ตรงเป๊ะ)</div><div class="inp">.streamlit/secrets.toml</div></div>
+<div class="field"><div class="lbl">Contents (วางข้อความ Secrets เดียวกับที่ใช้บน Streamlit Cloud เดิม)</div>
+<div class="inp">[supabase]<br>url = "https://xxxx.supabase.co"<br>key = "eyJ....(รหัสยาว)...."</div></div>
+</div></div></div>
+👉 ก๊อป Secrets ตัวจริงมาจาก: แอปเก่าบน Streamlit Cloud → Manage app → Settings → Secrets (วางทั้งก้อน)</div></div>
+<div class="step"><div class="snum">6</div><div>กด <b>Create Web Service</b> → รอ Render build ~3–5 นาที จนขึ้น <b>Live</b> (สีเขียว)</div></div>
+<div class="step"><div class="snum">7</div><div>ได้ <b>ลิงก์แอป</b> ด้านบน เช่น <code>https://roon-app.onrender.com</code> → เปิดทดสอบล็อกอินทุกแผนก</div></div>
+<div class="ok">✅ เสร็จส่วน B: แอปอยู่บนเน็ตตลอด ไม่หลับ มีลิงก์เดียวใช้ได้ทั้งบริษัท</div>
+</div></section>
+
+<!-- PART C -->
+<section class="partC"><h2>ส่วน C · ส่งให้พนักงานใช้ (ไม่ต้องมี bat!)</h2><div class="body">
+<div class="danger"><b>เข้าใจให้ตรงกัน:</b> พนักงาน <b>ไม่ต้องใช้ไฟล์ bat</b> และ <b>ไม่ต้องลงโปรแกรมอะไร</b> —
+แค่เปิด <b>ลิงก์</b> ที่ได้จากส่วน B บนมือถือ/คอมพิวเตอร์ แล้วล็อกอิน (bat เป็นแค่ของไว้รันในเครื่อง ดร.วรรณ เท่านั้น)</div>
+<div class="step"><div class="snum">1</div><div>ก๊อปลิงก์ (เช่น <code>https://roon-app.onrender.com</code>) ส่งให้พนักงานทางไลน์กลุ่ม</div></div>
+<div class="step"><div class="snum">2</div><div>แนะนำพนักงาน: เปิดลิงก์ → กด "เพิ่มไปหน้าจอหลัก" (Add to Home Screen) จะได้ไอคอนเหมือนแอปบนมือถือ</div></div>
+<div class="step"><div class="snum">3</div><div>พนักงานสำนักงาน → แท็บ "🏢 พนักงานสำนักงาน/แผนก" · พนักงานสาขา → แท็บ "🏪 พนักงานสาขา" (เลือกสาขา→รหัสของสาขา)</div></div>
+</div></section>
+
+<section><div class="body">
+<h2 style="background:#455A64">📌 สิ่งสำคัญหลังทำเสร็จ</h2>
+<table>
+<tr><th>เรื่อง</th><th>ต้องทำ</th></tr>
+<tr><td>บิลรายเดือน</td><td>ทั้ง Supabase Pro (~$25) และ Render Starter (~$7) ตั้งตัดบัตรอัตโนมัติ · อย่าให้บัตรหมดอายุ</td></tr>
+<tr><td>ปิดแอปเก่า</td><td>เมื่อลิงก์ใหม่ใช้ดีแล้ว ค่อยปิดแอปเก่า 7 ตัวบน Streamlit Cloud (ประหยัด/ไม่สับสน)</td></tr>
+<tr><td>ถ้าแอปช้า/ค้าง</td><td>เข้า Render → กดปุ่ม <b>Manual Deploy → Restart</b> รอ 1–2 นาที</td></tr>
+<tr><td>รหัสสำคัญ</td><td>เก็บรหัส GitHub / Supabase / Render ไว้ที่เดียว บอกลูกชายว่าอยู่ไหน</td></tr>
+</table>
+<div class="danger">🔐 อย่าโพสต์บรรทัด <code>key</code> ของ Supabase ที่สาธารณะเด็ดขาด (เป็นกุญแจเข้าฐานข้อมูลทั้งหมด)</div>
+</div></section>
+
+<p class="foot">ROON KHANOMKHAI · คู่มือขึ้น Cloud · จัดทำโดย ดร.วรรณ · 2026 · ราคาโดยประมาณ ควรตรวจสอบตอนสมัคร</p>
+</div></body></html>
