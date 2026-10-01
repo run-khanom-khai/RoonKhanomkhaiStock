@@ -35,8 +35,14 @@ def _get_client() -> Client:
     return create_client(url, key)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def read_sheet(table_name: str) -> pd.DataFrame:
-    """อ่านข้อมูลจาก Supabase table — ดึงครบ 'ทุกแถว'
+    """อ่านข้อมูลจาก Supabase table — ดึงครบ 'ทุกแถว' (มีแคช 60 วินาที)
+
+    เพิ่มแคช (st.cache_data) เพื่อความเร็ว: ไม่ต้องดึงข้อมูลใหม่ทุกคลิก
+    - จำข้อมูลไว้ 60 วินาที → เมนู/รายงานเด้งเร็วขึ้นมาก
+    - ทุกครั้งที่ 'บันทึก/แก้ไข/ลบ' ระบบจะล้างแคชทันที (ดู excel_db._bust_cache)
+      จึงไม่มีปัญหาข้อมูลเก่าหลังบันทึก
 
     ⚠️ สำคัญมาก (แก้บั๊ก DV1397 duplicate key):
     PostgREST/Supabase จำกัดการอ่าน select("*") ไว้สูงสุด ~1000 แถวต่อครั้ง

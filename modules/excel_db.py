@@ -158,6 +158,16 @@ def init_workbook():
         except Exception:
             pass
 
+def _bust_cache():
+    """ล้างแคชของ read_sheet (เรียกหลังบันทึก/แก้ไข/ลบ เพื่อให้เห็นข้อมูลล่าสุดทันที)"""
+    try:
+        if _use_supabase():
+            import supabase_db as sb
+            sb.read_sheet.clear()
+    except Exception:
+        pass
+
+
 def read_sheet(sheet_name: str) -> pd.DataFrame:
     if _use_supabase():
         import supabase_db as sb
@@ -168,24 +178,30 @@ def read_sheet(sheet_name: str) -> pd.DataFrame:
     return _local.read_sheet(sheet_name)
 
 def write_sheet(sheet_name: str, df: pd.DataFrame):
-    if _use_supabase():
-        import supabase_db as sb
-        return sb.write_sheet(sheet_name, df)
-    if _use_gsheets():
-        import gsheets_db as gs
-        gs.write_sheet(sheet_name, df)
-    else:
-        _local.write_sheet(sheet_name, df)
+    try:
+        if _use_supabase():
+            import supabase_db as sb
+            return sb.write_sheet(sheet_name, df)
+        if _use_gsheets():
+            import gsheets_db as gs
+            gs.write_sheet(sheet_name, df)
+        else:
+            _local.write_sheet(sheet_name, df)
+    finally:
+        _bust_cache()
 
 def append_row(sheet_name: str, row_dict: dict):
-    if _use_supabase():
-        import supabase_db as sb
-        return sb.append_row(sheet_name, row_dict)
-    if _use_gsheets():
-        import gsheets_db as gs
-        gs.append_row(sheet_name, row_dict)
-    else:
-        _local.append_row(sheet_name, row_dict)
+    try:
+        if _use_supabase():
+            import supabase_db as sb
+            return sb.append_row(sheet_name, row_dict)
+        if _use_gsheets():
+            import gsheets_db as gs
+            gs.append_row(sheet_name, row_dict)
+        else:
+            _local.append_row(sheet_name, row_dict)
+    finally:
+        _bust_cache()
 
 def append_row_with_auto_id(sheet_name: str, row_dict: dict, id_col: str,
                             prefix: str = "", max_retries: int = 30):
@@ -220,21 +236,27 @@ def append_row_with_auto_id(sheet_name: str, row_dict: dict, id_col: str,
 
 
 def update_row(sheet_name: str, id_col: str, id_value: str, updated_dict: dict):
-    if _use_supabase():
-        import supabase_db as sb
-        return sb.update_row(sheet_name, id_col, id_value, updated_dict)
-    if _use_gsheets():
-        import gsheets_db as gs
-        gs.update_row(sheet_name, id_col, id_value, updated_dict)
-    else:
-        _local.update_row(sheet_name, id_col, id_value, updated_dict)
+    try:
+        if _use_supabase():
+            import supabase_db as sb
+            return sb.update_row(sheet_name, id_col, id_value, updated_dict)
+        if _use_gsheets():
+            import gsheets_db as gs
+            gs.update_row(sheet_name, id_col, id_value, updated_dict)
+        else:
+            _local.update_row(sheet_name, id_col, id_value, updated_dict)
+    finally:
+        _bust_cache()
 
 def delete_row(sheet_name: str, id_col: str, id_value: str):
-    if _use_supabase():
-        import supabase_db as sb
-        return sb.delete_row(sheet_name, id_col, id_value)
-    if _use_gsheets():
-        import gsheets_db as gs
-        gs.delete_row(sheet_name, id_col, id_value)
-    else:
-        _local.delete_row(sheet_name, id_col, id_value)
+    try:
+        if _use_supabase():
+            import supabase_db as sb
+            return sb.delete_row(sheet_name, id_col, id_value)
+        if _use_gsheets():
+            import gsheets_db as gs
+            gs.delete_row(sheet_name, id_col, id_value)
+        else:
+            _local.delete_row(sheet_name, id_col, id_value)
+    finally:
+        _bust_cache()
